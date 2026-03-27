@@ -8,6 +8,7 @@ import { R5CheckDetailPage } from './pages/R5CheckDetailPage'
 import { FilesPage } from './pages/FilesPage'
 import { FileDetailPage } from './pages/FileDetailPage'
 import { MemoryLeaksPage } from './pages/MemoryLeaksPage'
+import { MemoryLeakDetailPage } from './pages/MemoryLeakDetailPage'
 import { AdminPage } from './pages/AdminPage'
 
 export default function App() {
@@ -21,7 +22,8 @@ export default function App() {
             <Route path="/dashboard"     element={<DashboardPage />} />
             <Route path="/r5checks"      element={<R5ChecksPage />} />
             <Route path="/r5checks/:id"  element={<R5CheckDetailPage />} />
-            <Route path="/memory-leaks"  element={<MemoryLeaksPage />} />
+            <Route path="/memory-leaks"      element={<MemoryLeaksPage />} />
+            <Route path="/memory-leaks/:id"  element={<MemoryLeakDetailPage />} />
             <Route path="/files"         element={<FilesPage />} />
             <Route path="/files/:id"     element={<FileDetailPage />} />
             <Route path="/admin"         element={<AdminPage />} />

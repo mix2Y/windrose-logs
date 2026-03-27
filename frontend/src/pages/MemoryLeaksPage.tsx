@@ -37,7 +37,8 @@ export function MemoryLeaksPage() {
                 No memory leak events found in processed files
               </td></tr>}
               {!loading && data.map((s, i) => (
-                <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${i * 15}ms` }}>
+                <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${i * 15}ms` }}
+                  onClick={() => (window.location.href = `/memory-leaks/${s.id}`)}>
                   <td>
                     <Link to={`/memory-leaks/${s.id}`} style={{ color: 'var(--blue)', textDecoration: 'none', fontSize: 13, fontWeight: 500 }}>
                       {s.conditionText}

@@ -27,40 +27,41 @@ public class LogParsingJob(
             var events = parser.Parse(stream, fileId);
             logger.LogInformation("Parsed {Count} events from {FileId}", events.Count, fileId);
 
-            // Group by (eventType, key fields) → upsert signatures
+            // Remove old events for this file (idempotent re-parse)
+            var oldEvents = db.LogEvents.Where(e => e.FileId == fileId);
+            db.LogEvents.RemoveRange(oldEvents);
+            await db.SaveChangesAsync(ct);
+
+            // Ensure signatures exist (create if missing, don't update counts yet)
             var r5Groups = events
                 .Where(e => e.EventType == "R5Check" && e.CheckCondition != null)
                 .GroupBy(e => new { e.CheckCondition, e.CheckWhere });
-
             foreach (var g in r5Groups)
-                await UpsertSignature(db,
-                    eventType:     "R5Check",
-                    hash:          R5LogParser.ComputeSignatureHash(g.Key.CheckCondition!, g.Key.CheckWhere ?? ""),
-                    conditionText: g.Key.CheckCondition,
-                    whereText:     g.Key.CheckWhere,
-                    sourceFile:    g.First().CheckSourceFile,
-                    events:        [.. g],
-                    ct: ct);
+                await EnsureSignature(db, "R5Check",
+                    R5LogParser.ComputeSignatureHash(g.Key.CheckCondition!, g.Key.CheckWhere ?? ""),
+                    g.Key.CheckCondition, g.Key.CheckWhere, g.First().CheckSourceFile,
+                    g.ToList(), ct);
 
             var mlGroups = events
                 .Where(e => e.EventType == "MemoryLeak")
                 .GroupBy(e => e.MemoryWorld ?? "");
-
             foreach (var g in mlGroups)
-                await UpsertSignature(db,
-                    eventType:     "MemoryLeak",
-                    hash:          R5LogParser.ComputeMemoryLeakHash(g.Key),
-                    conditionText: $"Memory leak in world: {g.Key}",
-                    whereText:     null,
-                    sourceFile:    null,
-                    events:        [.. g],
-                    ct: ct);
+                await EnsureSignature(db, "MemoryLeak",
+                    R5LogParser.ComputeMemoryLeakHash(g.Key),
+                    $"Memory leak in world: {g.Key}", null, null,
+                    g.ToList(), ct);
 
+            // Save all events
             db.LogEvents.AddRange(events);
             file.Status      = "done";
             file.EventsFound = events.Count;
             await db.SaveChangesAsync(ct);
-            logger.LogInformation("File {FileId} processed OK", fileId);
+
+            // Recalculate signature stats from actual LogEvents (idempotent, always correct)
+            var affectedSigIds = events.Select(e => e.SignatureId).Distinct().ToList();
+            await RecalculateSignatureStats(db, affectedSigIds, ct);
+
+            logger.LogInformation("File {FileId} processed OK — {Count} events", fileId, events.Count);
         }
         catch (Exception ex)
         {
@@ -71,7 +72,11 @@ public class LogParsingJob(
         }
     }
 
-    private static async Task UpsertSignature(
+    /// <summary>
+    /// Creates signature if it doesn't exist yet.
+    /// Does NOT touch TotalCount/FileCount — those are recalculated from LogEvents.
+    /// </summary>
+    private static async Task EnsureSignature(
         AppDbContext db, string eventType, string hash,
         string? conditionText, string? whereText, string? sourceFile,
         List<LogEvent> events, CancellationToken ct)
@@ -89,20 +94,48 @@ public class LogParsingJob(
                 SourceFile    = sourceFile,
                 FirstSeen     = events.Min(e => e.Timestamp),
                 LastSeen      = events.Max(e => e.Timestamp),
-                TotalCount    = events.Count,
-                FileCount     = 1
+                TotalCount    = 0,
+                FileCount     = 0,
             };
             db.EventSignatures.Add(sig);
+            await db.SaveChangesAsync(ct);
         }
-        else
-        {
-            sig.TotalCount += events.Count;
-            sig.FileCount  += 1;
-            sig.LastSeen    = events.Max(e => e.Timestamp);
-        }
-
-        await db.SaveChangesAsync(ct);
         foreach (var ev in events) ev.SignatureId = sig.Id;
+    }
+
+    /// <summary>
+    /// Recalculates TotalCount, FileCount, FirstSeen, LastSeen
+    /// directly from LogEvents — always correct, never double-counts.
+    /// </summary>
+    private static async Task RecalculateSignatureStats(
+        AppDbContext db, List<Guid> sigIds, CancellationToken ct)
+    {
+        foreach (var sigId in sigIds)
+        {
+            var sig = await db.EventSignatures.FindAsync([sigId], ct);
+            if (sig is null) continue;
+
+            var stats = await db.LogEvents
+                .Where(e => e.SignatureId == sigId)
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    TotalCount = g.Count(),
+                    FileCount  = g.Select(e => e.FileId).Distinct().Count(),
+                    FirstSeen  = g.Min(e => e.Timestamp),
+                    LastSeen   = g.Max(e => e.Timestamp),
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (stats is not null)
+            {
+                sig.TotalCount = stats.TotalCount;
+                sig.FileCount  = stats.FileCount;
+                sig.FirstSeen  = stats.FirstSeen;
+                sig.LastSeen   = stats.LastSeen;
+            }
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     public static string GetStoragePath(Guid fileId, string fileName)
