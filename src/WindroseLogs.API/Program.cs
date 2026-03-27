@@ -35,10 +35,7 @@ builder.Services.AddScoped<LogParsingJob>();
 // ── Web ────────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "Windrose Logs API", Version = "v1" });
-});
+builder.Services.AddOpenApi();
 
 builder.Services.AddCors(options =>
 {
@@ -72,8 +69,7 @@ using (var scope = app.Services.CreateScope())
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
 
 app.UseCors("Frontend");
