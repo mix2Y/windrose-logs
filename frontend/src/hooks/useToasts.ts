@@ -21,12 +21,15 @@ export function useToasts() {
 
   const add = useCallback((t: Omit<Toast, 'id'>) => {
     const id = _nextId++
-    const duration = t.duration ?? (t.type === 'alert' ? 8000 : 4000)
     setToasts(prev => [...prev, { ...t, id }])
-    timers.current[id] = setTimeout(() => {
-      setToasts(prev => prev.filter(x => x.id !== id))
-      delete timers.current[id]
-    }, duration)
+    // Alert toasts stay until manually dismissed
+    if (t.type !== 'alert') {
+      const duration = t.duration ?? 4000
+      timers.current[id] = setTimeout(() => {
+        setToasts(prev => prev.filter(x => x.id !== id))
+        delete timers.current[id]
+      }, duration)
+    }
   }, [])
 
   // Register global push
