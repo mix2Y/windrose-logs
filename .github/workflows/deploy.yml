@@ -17,10 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
+      - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.x'
+          dotnet-version: '9.x'
 
       - name: Restore & Build
         run: dotnet build src/WindroseLogs.API/WindroseLogs.API.csproj -c Release
