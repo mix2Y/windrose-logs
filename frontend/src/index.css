@@ -12,9 +12,9 @@
     --bg-3:       #eae9e5;
     --border:     #e4e2dd;
     --border-2:   #d6d4ce;
-    --text:       #1a1917;
-    --text-2:     #57534e;
-    --text-3:     #a8a29e;
+    --text:       #111110;
+    --text-2:     #44403c;
+    --text-3:     #8c8680;
     --red:        #dc2626;
     --red-bg:     #fef2f2;
     --red-border: #fecaca;
@@ -39,8 +39,8 @@
     background: var(--bg);
     color: var(--text);
     font-family: 'Geist', system-ui, sans-serif;
-    font-size: 13.5px;
-    line-height: 1.55;
+    font-size: 14px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -84,7 +84,7 @@
 .data-table td {
   padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  color: var(--text-2); font-size: 13px;
+  color: var(--text-2); font-size: 13.5px;
 }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr { transition: background 0.1s; cursor: pointer; }
