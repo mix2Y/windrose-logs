@@ -1,0 +1,61 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.3.0",
+  "id": "d5865e66-6dff-4bc3-bf54-9b753a99d59a",
+  "developer": {
+    "name": "Sundrift Games",
+    "websiteUrl": "https://windroselogs.sundrift.tech",
+    "privacyUrl": "https://windroselogs.sundrift.tech",
+    "termsOfUseUrl": "https://windroselogs.sundrift.tech"
+  },
+  "name": {
+    "short": "Windrose Logs",
+    "full": "Windrose Logs Bot"
+  },
+  "description": {
+    "short": "Автозагрузка .log файлов в систему анализа",
+    "full": "Автоматически загружает .log файлы из чата в Windrose Logs. Команды: !stats, !r5 all, !r5 popular, !r5 unique."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#D97706",
+  "bots": [
+    {
+      "botId": "d5865e66-6dff-4bc3-bf54-9b753a99d59a",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": true,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupchat"],
+          "commands": [
+            { "title": "!stats",      "description": "Общая статистика по логам" },
+            { "title": "!r5 all",     "description": "Все R5Check сигнатуры" },
+            { "title": "!r5 popular", "description": "Топ-5 самых частых ошибок" },
+            { "title": "!r5 unique",  "description": "Уникальные ошибки (1 раз)" },
+            { "title": "!help",       "description": "Список команд" }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["windroselogs.sundrift.tech"],
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "ChannelMessage.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "ChatMessage.Read.Chat",
+          "type": "Application"
+        }
+      ]
+    }
+  }
+}
