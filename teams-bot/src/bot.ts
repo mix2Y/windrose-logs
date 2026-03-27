@@ -19,13 +19,18 @@ async function apiGet(path: string) {
 async function uploadLog(content: Buffer, fileName: string, uploaderName: string) {
   const form = new FormData()
   form.append('file', content, { filename: fileName, contentType: 'application/octet-stream' })
-  const res = await fetch(`${API_URL}/api/bulk/upload`, {
-    method: 'POST',
-    headers: { 'X-Api-Key': API_KEY, 'X-Uploader-Name': uploaderName, ...form.getHeaders() },
-    body: form,
-  })
-  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-  return res.json() as Promise<any>
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 60000)
+  try {
+    const res = await fetch(`${API_URL}/api/bulk/upload`, {
+      method: 'POST',
+      headers: { 'X-Api-Key': API_KEY, 'X-Uploader-Name': uploaderName, ...form.getHeaders() },
+      body: form,
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`Upload failed: ${res.status} ${res.statusText}`)
+    return res.json() as Promise<any>
+  } finally { clearTimeout(timeout) }
 }
 
 async function downloadFile(url: string, token: string): Promise<Buffer> {
@@ -138,6 +143,10 @@ export class WindroseBot extends ActivityHandler {
           if (!r.ok) throw new Error(`Download failed: ${r.status} ${r.statusText}`)
           const buf = Buffer.from(await r.arrayBuffer())
           console.log(`[DL] Downloaded ${att.name}: ${buf.length} bytes`)
+
+          console.log(`[UP] Uploading ${att.name} to API...`)
+          const res = await uploadLog(buf, att.name!, uploaderName)
+          console.log(`[UP] Upload response: ${JSON.stringify(res).slice(0, 200)}`)
 
           const res = await uploadLog(buf, att.name!, uploaderName)
           const files = res.files ?? [res]
