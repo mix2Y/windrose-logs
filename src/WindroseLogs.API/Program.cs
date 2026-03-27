@@ -16,8 +16,13 @@ builder.Services.AddAuthorization(options =>
 });
 
 // ── Database ───────────────────────────────────────────────────────────────────
+var connStr = builder.Configuration.GetConnectionString("DefaultConnection")!;
+var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connStr);
+dataSourceBuilder.EnableDynamicJson();
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(dataSource));
 
 // ── Hangfire ───────────────────────────────────────────────────────────────────
 builder.Services.AddHangfire(config => config
@@ -25,7 +30,7 @@ builder.Services.AddHangfire(config => config
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(c =>
-        c.UseNpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection"))));
+        c.UseNpgsqlConnection(connStr)));
 builder.Services.AddHangfireServer();
 
 // ── Application Services ───────────────────────────────────────────────────────
