@@ -20,6 +20,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
+  if (res.status === 401) {
+    // Token expired mid-session — redirect to re-auth
+    window.location.href = '/'
+    throw new Error('Unauthenticated')
+  }
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }

@@ -27,18 +27,40 @@ export function FileDetailPage() {
   const [counts, setCounts]   = useState<{ eventType: string; count: number }[]>([])
   const [sigs, setSigs]       = useState<(SignatureSummary & { fileCount: number })[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     setLoading(true)
+    setError(null)
     api.files.details(id)
-      .then(r => { setFile(r.file); setCounts(r.eventCounts); setSigs(r.topSignatures) })
+      .then(r => {
+        const f = r.file ?? (r as any).File
+        setFile(f)
+        setCounts(r.eventCounts ?? [])
+        setSigs(r.topSignatures ?? [])
+      })
+      .catch(e => {
+        const msg = String(e)
+        // If unauthenticated — redirect to root so MSAL can re-auth
+        if (msg.includes('401') || msg.includes('Not authenticated')) {
+          window.location.href = '/'
+          return
+        }
+        setError(msg)
+      })
       .finally(() => setLoading(false))
   }, [id])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3)', fontSize: 13 }}>
       <span className="animate-pulse">Loading…</span>
+    </div>
+  )
+  if (error) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 8 }}>
+      <span style={{ color: 'var(--red)', fontSize: 13 }}>Failed to load file</span>
+      <span style={{ color: 'var(--text-3)', fontSize: 11, fontFamily: 'Geist Mono,monospace' }}>{error}</span>
     </div>
   )
   if (!file) return (
