@@ -171,5 +171,18 @@ export const api = {
         eventCounts: { eventType: string; count: number }[]
         topSignatures: (SignatureSummary & { fileCount: number })[]
       }>(`/files/${id}`),
+    raw: (id: string, page = 1, filter?: string) => {
+      const p = new URLSearchParams({ page: String(page) })
+      if (filter) p.set('filter', filter)
+      return request<{
+        fileName: string
+        totalLines: number
+        totalPages: number
+        page: number
+        pageSize: number
+        filtered: boolean
+        lines: { lineNumber: number; text: string }[]
+      }>(`/files/${id}/raw?${p}`)
+    },
   },
 }

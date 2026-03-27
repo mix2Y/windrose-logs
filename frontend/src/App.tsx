@@ -7,6 +7,7 @@ import { R5ChecksPage } from './pages/R5ChecksPage'
 import { R5CheckDetailPage } from './pages/R5CheckDetailPage'
 import { FilesPage } from './pages/FilesPage'
 import { FileDetailPage } from './pages/FileDetailPage'
+import { LogViewerPage } from './pages/LogViewerPage'
 import { MemoryLeaksPage } from './pages/MemoryLeaksPage'
 import { MemoryLeakDetailPage } from './pages/MemoryLeakDetailPage'
 import { AdminPage } from './pages/AdminPage'
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/memory-leaks/:id"  element={<MemoryLeakDetailPage />} />
             <Route path="/files"         element={<FilesPage />} />
             <Route path="/files/:id"     element={<FileDetailPage />} />
+            <Route path="/files/:id/log" element={<LogViewerPage />} />
             <Route path="/admin"         element={<AdminPage />} />
           </Routes>
         </Layout>

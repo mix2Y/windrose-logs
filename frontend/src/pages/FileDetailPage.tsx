@@ -23,135 +23,109 @@ function MetaField({ label, value, mono }: { label: string; value: string; mono?
 
 export function FileDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [file, setFile]       = useState<LogFileDto | null>(null)
-  const [counts, setCounts]   = useState<{ eventType: string; count: number }[]>([])
-  const [sigs, setSigs]       = useState<(SignatureSummary & { fileCount: number })[]>([])
+  const [file,    setFile]    = useState<LogFileDto | null>(null)
+  const [counts,  setCounts]  = useState<{ eventType: string; count: number }[]>([])
+  const [sigs,    setSigs]    = useState<(SignatureSummary & { fileCount: number })[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     api.files.details(id)
-      .then(r => {
-        const f = r.file ?? (r as any).File
-        setFile(f)
-        setCounts(r.eventCounts ?? [])
-        setSigs(r.topSignatures ?? [])
-      })
+      .then(r => { setFile(r.file); setCounts(r.eventCounts ?? []); setSigs(r.topSignatures ?? []) })
       .catch(e => {
         const msg = String(e)
-        // If unauthenticated — redirect to root so MSAL can re-auth
-        if (msg.includes('401') || msg.includes('Not authenticated')) {
-          window.location.href = '/'
-          return
-        }
+        if (msg.includes('401') || msg.includes('Not authenticated')) { window.location.href = '/'; return }
         setError(msg)
       })
       .finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3)', fontSize: 13 }}>
-      <span className="animate-pulse">Loading…</span>
-    </div>
-  )
-  if (error) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 8 }}>
-      <span style={{ color: 'var(--red)', fontSize: 13 }}>Failed to load file</span>
-      <span style={{ color: 'var(--text-3)', fontSize: 11, fontFamily: 'Geist Mono,monospace' }}>{error}</span>
-    </div>
-  )
-  if (!file) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--red)', fontSize: 13 }}>
-      File not found
-    </div>
-  )
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh', color:'var(--text-3)', fontSize:13 }}><span className="animate-pulse">Loading…</span></div>
+  if (error)   return <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'60vh', gap:8 }}><span style={{ color:'var(--red)', fontSize:13 }}>Failed to load file</span><span style={{ color:'var(--text-3)', fontSize:11, fontFamily:'Geist Mono,monospace' }}>{error}</span></div>
+  if (!file)   return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh', color:'var(--red)', fontSize:13 }}>File not found</div>
 
   const totalEvents = counts.reduce((s, c) => s + c.count, 0)
 
   return (
     <div>
       {/* Header */}
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid var(--border)' }}>
-        <Link to="/files" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-3)', textDecoration: 'none', marginBottom: 14 }}>
+      <div style={{ padding:'20px 28px', borderBottom:'1px solid var(--border)' }}>
+        <Link to="/files" style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, color:'var(--text-3)', textDecoration:'none', marginBottom:14 }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           Back to Log Files
         </Link>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:20 }}>
+          {/* Left: name + badges */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
               <StatusBadge status={file.status} />
               <span className="badge badge-gray">{file.source}</span>
             </div>
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--text)', fontFamily: 'Geist Mono,monospace', letterSpacing: '-0.01em' }}>
+            <h1 style={{ margin:0, fontSize:17, fontWeight:600, color:'var(--text)', fontFamily:'Geist Mono,monospace', letterSpacing:'-0.01em', wordBreak:'break-all' }}>
               {file.fileName}
             </h1>
           </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--red)', fontFamily: 'Geist Mono,monospace', lineHeight: 1, letterSpacing: '-0.03em' }}>
-              {totalEvents}
+          {/* Right: view log btn + count */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:10, flexShrink:0 }}>
+            <Link to={`/files/${id}/log`}
+              style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:500, padding:'6px 12px', borderRadius:6, border:'1px solid var(--border)', color:'var(--text-2)', textDecoration:'none', background:'var(--bg)', whiteSpace:'nowrap' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+              View Raw Log
+            </Link>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:36, fontWeight:700, color:'var(--red)', fontFamily:'Geist Mono,monospace', lineHeight:1, letterSpacing:'-0.03em' }}>{totalEvents}</div>
+              <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>events found</div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>events found</div>
           </div>
         </div>
       </div>
 
       {/* Meta strip */}
-      <div style={{ padding: '12px 28px', borderBottom: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+      <div style={{ padding:'12px 28px', borderBottom:'1px solid var(--border)', background:'var(--bg)', display:'flex', gap:32, flexWrap:'wrap' }}>
         <MetaField label="SESSION DATE" value={file.sessionDate ?? '—'} mono />
         <MetaField label="UPLOADED"     value={fmtDate(file.uploadedAt)} />
         <MetaField label="SOURCE"       value={file.source} />
         {file.errorMessage && <MetaField label="ERROR" value={file.errorMessage} />}
       </div>
 
-      <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20 }}>
+      <div style={{ padding:'20px 28px', display:'grid', gridTemplateColumns:'260px 1fr', gap:20 }}>
         {/* Left: event breakdown */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-            Event Breakdown
-          </div>
-          <div className="card" style={{ overflow: 'hidden' }}>
-            {counts.length === 0 ? (
-              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>No events found</div>
-            ) : counts.map(c => (
-              <div key={c.eventType} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'Geist Mono,monospace' }}>{c.eventType}</span>
-                <span className="badge badge-red">{c.count}</span>
-              </div>
-            ))}
+          <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>Event Breakdown</div>
+          <div className="card" style={{ overflow:'hidden' }}>
+            {counts.length === 0
+              ? <div style={{ padding:'24px 16px', textAlign:'center', color:'var(--text-3)', fontSize:12 }}>No events found</div>
+              : counts.map(c => (
+                <div key={c.eventType} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)' }}>
+                  <span style={{ fontSize:12, color:'var(--text-2)', fontFamily:'Geist Mono,monospace' }}>{c.eventType}</span>
+                  <span className="badge badge-red">{c.count}</span>
+                </div>
+              ))
+            }
           </div>
         </div>
 
         {/* Right: top signatures */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-            R5Check Signatures in this File
-          </div>
-          <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>R5Check Signatures in this File</div>
+          <div className="card" style={{ overflow:'hidden' }}>
             <table className="data-table">
               <thead><tr>
-                <th>Condition</th>
-                <th>Source File</th>
-                <th style={{ textAlign: 'right' }}>In this file</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
+                <th>Condition</th><th>Source File</th>
+                <th style={{ textAlign:'right' }}>In this file</th>
+                <th style={{ textAlign:'right' }}>Total</th>
               </tr></thead>
               <tbody>
-                {sigs.length === 0 && (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>No R5Check events</td></tr>
-                )}
+                {sigs.length === 0 && <tr><td colSpan={4} style={{ textAlign:'center', padding:'24px 16px', color:'var(--text-3)' }}>No R5Check events</td></tr>}
                 {sigs.map((s, i) => (
-                  <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${i * 15}ms` }}
-                    onClick={() => (window.location.href = `/r5checks/${s.id}?fileId=${id}`)}>
-                    <td>
-                      <Link to={`/r5checks/${s.id}`} style={{ color: 'var(--amber)', textDecoration: 'none', fontFamily: 'Geist Mono,monospace', fontSize: 12, fontWeight: 500 }}>
-                        {s.conditionText}
-                      </Link>
-                    </td>
-                    <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
-                    <td style={{ textAlign: 'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>
-                    <td style={{ textAlign: 'right' }}><span className="badge badge-gray">{s.totalCount}</span></td>
+                  <tr key={s.id} className="animate-fade-in" style={{ animationDelay:`${i*15}ms`, cursor:'pointer' }}
+                    onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
+                    <td><Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
+                    <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
+                    <td style={{ textAlign:'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>
+                    <td style={{ textAlign:'right' }}><span className="badge badge-gray">{s.totalCount}</span></td>
                   </tr>
                 ))}
               </tbody>

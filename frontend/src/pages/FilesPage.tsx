@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { api, LogFileDto } from '../lib/api'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 
@@ -156,7 +156,16 @@ export function FilesPage() {
                 <tr key={f.id} className="animate-fade-in"
                   style={{ animationDelay: `${Math.min(i,20) * 15}ms`, cursor: 'pointer' }}
                   onClick={() => navigate(`/files/${f.id}`)}>
-                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 12, color: 'var(--blue)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.fileName}</td>
+                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 12, color: 'var(--blue)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.fileName}</span>
+                      <Link to={`/files/${f.id}/log`} onClick={e => e.stopPropagation()}
+                        title="View raw log"
+                        style={{ flexShrink: 0, color: 'var(--text-3)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/></svg>
+                      </Link>
+                    </span>
+                  </td>
                   <td><span className="badge badge-gray">{f.source}</span></td>
                   <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-2)' }}>{fmtSession(f.sessionDate)}</td>
                   <td><StatusBadge status={f.status} /></td>
