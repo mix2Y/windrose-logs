@@ -127,9 +127,17 @@ export class WindroseBot extends ActivityHandler {
           const downloadUrl = (att.content as any)?.downloadUrl ?? att.contentUrl
           if (!downloadUrl) { results.push(`❌ \`${att.name}\` — нет URL для скачивания`); continue }
 
-          const r = await fetch(downloadUrl)
-          if (!r.ok) throw new Error(`Download failed: ${r.status}`)
+          console.log(`[DL] Downloading ${att.name} from ${downloadUrl.slice(0, 80)}`)
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 30000)
+          let r: any
+          try {
+            r = await fetch(downloadUrl, { signal: controller.signal })
+          } finally { clearTimeout(timeout) }
+
+          if (!r.ok) throw new Error(`Download failed: ${r.status} ${r.statusText}`)
           const buf = Buffer.from(await r.arrayBuffer())
+          console.log(`[DL] Downloaded ${att.name}: ${buf.length} bytes`)
 
           const res = await uploadLog(buf, att.name!, uploaderName)
           const files = res.files ?? [res]
