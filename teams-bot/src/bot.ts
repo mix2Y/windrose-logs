@@ -91,10 +91,12 @@ export class WindroseBot extends ActivityHandler {
 
     // Strip @mention HTML tags: "<at>Windrose Logs</at> !stats" → "!stats"
     const rawText = (activity.text ?? '')
-      .replace(/<at[^>]*>.*?<\/at>/gi, '')  // remove <at>BotName</at>
+      .replace(/<at[^>]*>.*?<\/at>/gi, '')
       .replace(/&nbsp;/gi, ' ')
       .trim()
     const text = rawText.toLowerCase()
+
+    console.log(`[MSG] from="${uploaderName}" rawText="${rawText}" text="${text}" attachments=${activity.attachments?.length ?? 0}`)
 
     // ── File attachment ──────────────────────────────────────────────────────
     const attachments = activity.attachments ?? []

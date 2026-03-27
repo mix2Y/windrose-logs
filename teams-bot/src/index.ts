@@ -22,7 +22,8 @@ const server = restify.createServer({ name: 'WindroseBot' })
 server.use(restify.plugins.bodyParser())
 
 server.post('/api/messages', async (req, res) => {
-  console.log(`[IN] ${new Date().toISOString()} type=${req.body?.type} text="${req.body?.text?.slice(0,80)}"`)
+  const body = req.body || {}
+  console.log(`[IN] ${new Date().toISOString()} type=${body.type} text="${body.text?.slice?.(0,80)}" keys=${Object.keys(body).join(',')}`)
   await adapter.processActivity(req, res, async ctx => {
     await bot.run(ctx)
   })
