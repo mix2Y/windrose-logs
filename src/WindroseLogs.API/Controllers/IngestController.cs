@@ -1,6 +1,7 @@
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WindroseLogs.Infrastructure.Data;
 using WindroseLogs.Infrastructure.Jobs;
 using WindroseLogs.Core.Models;
@@ -78,6 +79,25 @@ public class IngestController(
             j.ProcessFileAsync(logFile.Id, CancellationToken.None));
 
         return Ok(new { fileId = logFile.Id, fileName = request.FileName });
+    }
+
+    /// <summary>
+    /// Ставит все pending файлы в очередь Hangfire.
+    /// Используется после ручного сброса статусов в БД.
+    /// </summary>
+    [HttpPost("requeue-pending")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> RequeuePending(CancellationToken ct)
+    {
+        var pending = await db.LogFiles
+            .Where(f => f.Status == "pending")
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+
+        foreach (var id in pending)
+            jobs.Enqueue<LogParsingJob>(j => j.ProcessFileAsync(id, CancellationToken.None));
+
+        return Ok(new { queued = pending.Count });
     }
 
     private Guid GetUserId()

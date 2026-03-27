@@ -147,6 +147,7 @@ export const api = {
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
       return res.json() as Promise<{ fileId: string; jobId: string; status: string }>
     },
+    requeuePending: () => request<{ queued: number }>('/ingest/requeue-pending', { method: 'POST' }),
   },
 
   files: {

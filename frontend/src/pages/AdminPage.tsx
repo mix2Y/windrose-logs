@@ -16,6 +16,7 @@ export function AdminPage() {
   const [stats, setStats]   = useState<AdminStats | null>(null)
   const [users, setUsers]   = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [requeuing, setRequeuing] = useState(false)
   const [saving,  setSaving]  = useState<string | null>(null)
   const [msg, setMsg]         = useState<{ text: string; ok: boolean } | null>(null)
 
@@ -25,6 +26,15 @@ export function AdminPage() {
       .catch(() => setMsg({ text: 'Failed to load admin data', ok: false }))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleRequeue() {
+    setRequeuing(true)
+    try {
+      const r = await api.ingest.requeuePending()
+      setMsg({ text: `Queued ${r.queued} pending files for parsing`, ok: true })
+    } catch { setMsg({ text: 'Requeue failed', ok: false }) }
+    finally { setRequeuing(false) }
+  }
 
   async function handleRoleChange(userId: string, newRole: string) {
     setSaving(userId)
@@ -54,6 +64,10 @@ export function AdminPage() {
             {msg.ok ? '✓' : '✗'} {msg.text}
           </span>
         )}
+        <button className="btn btn-ghost" onClick={handleRequeue} disabled={requeuing}
+          style={{ fontSize: 12 }}>
+          {requeuing ? '⟳ Queuing…' : '⟳ Requeue pending'}
+        </button>
       </div>
 
       <div style={{ padding: '20px 28px' }}>
