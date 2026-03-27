@@ -34,11 +34,7 @@ export function FileDetailPage() {
     setLoading(true); setError(null)
     api.files.details(id)
       .then(r => { setFile(r.file); setCounts(r.eventCounts ?? []); setSigs(r.topSignatures ?? []) })
-      .catch(e => {
-        const msg = String(e)
-        if (msg.includes('401') || msg.includes('Not authenticated')) { window.location.href = '/'; return }
-        setError(msg)
-      })
+      .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [id])
 

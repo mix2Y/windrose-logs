@@ -11,7 +11,13 @@ async function getToken(): Promise<string> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = await getToken()
+  let token: string
+  try {
+    token = await getToken()
+  } catch {
+    // Not authenticated — let caller handle it
+    throw new Error('Not authenticated')
+  }
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
@@ -20,11 +26,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
-  if (res.status === 401) {
-    // Token expired mid-session — redirect to re-auth
-    window.location.href = '/'
-    throw new Error('Unauthenticated')
-  }
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
