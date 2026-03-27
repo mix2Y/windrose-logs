@@ -61,10 +61,36 @@ export function DashboardPage() {
   const [days,     setDays]     = useState(30)
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [sortBy,  setSortBy]  = useState<'totalCount' | 'lastSeen' | 'firstSeen' | 'fileCount'>('totalCount')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { api.r5checks.summary().then(setSummary).catch(console.error) }, [])
   useEffect(() => { api.r5checks.timeline(days).then(setTimeline).catch(console.error) }, [days])
+
+  const sorted = [...summary].sort((a, b) => {
+    const av = a[sortBy] as number | string
+    const bv = b[sortBy] as number | string
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+
+  function handleSort(col: typeof sortBy) {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(col); setSortDir('desc') }
+  }
+
+  function SortIcon({ col }: { col: typeof sortBy }) {
+    const active = sortBy === col
+    return (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--amber)' : 'var(--text-3)'} strokeWidth="2.5" style={{ marginLeft: 3 }}>
+        {active && sortDir === 'asc'  ? <polyline points="18 15 12 9 6 15"/> :
+         active && sortDir === 'desc' ? <polyline points="6 9 12 15 18 9"/> :
+         <><polyline points="18 15 12 9 6 15" opacity="0.3"/><polyline points="6 15 12 21 18 15" opacity="0.3"/></>}
+      </svg>
+    )
+  }
 
   const total = summary.reduce((s, x) => s + x.totalCount, 0)
   const lastSeen = summary.length
@@ -142,23 +168,25 @@ export function DashboardPage() {
             <thead><tr>
               <th>Condition</th>
               <th>Source File</th>
-              <th style={{ textAlign: 'center' }}>Files</th>
-              <th style={{ textAlign: 'right' }}>Count</th>
-              <th style={{ textAlign: 'right' }}>Last Seen</th>
+              <th style={{ textAlign: 'center', cursor:'pointer' }} onClick={() => handleSort('fileCount')}>Files <SortIcon col="fileCount"/></th>
+              <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('totalCount')}>Count <SortIcon col="totalCount"/></th>
+              <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('firstSeen')}>First <SortIcon col="firstSeen"/></th>
+              <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('lastSeen')}>Last <SortIcon col="lastSeen"/></th>
             </tr></thead>
             <tbody>
               {summary.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
                   No events yet — upload a .log file to get started
                 </td></tr>
               )}
-              {summary.slice(0, 10).map(s => (
+              {sorted.slice(0, 15).map(s => (
                 <tr key={s.id} onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
-                  <td><Link to={`/r5checks/${s.id}`} style={{ color: 'var(--amber)', textDecoration: 'none', fontFamily: 'Geist Mono,monospace', fontSize: 12, fontWeight: 500 }}>{s.conditionText}</Link></td>
+                  <td><Link to={`/r5checks/${s.id}`} style={{ color: 'var(--amber)', textDecoration: 'none', fontFamily: 'Geist Mono,monospace', fontSize: 12, fontWeight: 500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
                   <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
                   <td style={{ textAlign: 'center' }}><span className="badge badge-gray">{s.fileCount}</span></td>
                   <td style={{ textAlign: 'right' }}><span className="badge badge-red">{s.totalCount}</span></td>
-                  <td style={{ textAlign: 'right', fontFamily: 'Geist Mono,monospace', fontSize: 11 }}>{new Date(s.lastSeen).toLocaleDateString()}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'Geist Mono,monospace', fontSize: 11 }}>{new Date(s.firstSeen).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'Geist Mono,monospace', fontSize: 11 }}>{new Date(s.lastSeen).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
                 </tr>
               ))}
             </tbody>

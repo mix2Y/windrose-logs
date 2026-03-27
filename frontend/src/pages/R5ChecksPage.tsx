@@ -1,64 +1,109 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, SignatureSummary, LogFileDto } from '../lib/api'
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 
-type Tab = 'all' | 'popular' | 'unique'
-const PAGE_SIZE = 50
+type Tab    = 'all' | 'popular' | 'unique'
+type SortBy = 'totalCount' | 'fileCount' | 'lastSeen' | 'firstSeen' | 'conditionText'
+type SortDir = 'asc' | 'desc'
+
+function SortHeader({ label, col, sortBy, sortDir, onSort, style }: {
+  label: string; col: SortBy; sortBy: SortBy; sortDir: SortDir
+  onSort: (c: SortBy) => void; style?: React.CSSProperties
+}) {
+  const active = sortBy === col
+  return (
+    <th style={{ cursor: 'pointer', userSelect: 'none', ...style }}
+      onClick={() => onSort(col)}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--amber)' : 'var(--text-3)'} strokeWidth="2.5">
+          {active && sortDir === 'asc'
+            ? <polyline points="18 15 12 9 6 15"/>
+            : active && sortDir === 'desc'
+              ? <polyline points="6 9 12 15 18 9"/>
+              : <><polyline points="18 15 12 9 6 15" opacity="0.4"/><polyline points="6 15 12 21 18 15" opacity="0.4"/></>}
+        </svg>
+      </span>
+    </th>
+  )
+}
 
 export function R5ChecksPage() {
-  const [tab,  setTab]    = useState<Tab>('all')
-  const [data, setData]   = useState<SignatureSummary[]>([])
-  const [hasMore, setHasMore] = useState(false)
-  const [page,    setPage]    = useState(1)
-  const [query,   setQuery]   = useState('')
-  const [loading, setLoading] = useState(false)
+  const [tab,      setTab]      = useState<Tab>('all')
+  const [raw,      setRaw]      = useState<SignatureSummary[]>([])   // unfiltered from API
+  const [display,  setDisplay]  = useState<SignatureSummary[]>([])   // after sort+search
+  const [query,    setQuery]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [sortBy,   setSortBy]   = useState<SortBy>('totalCount')
+  const [sortDir,  setSortDir]  = useState<SortDir>('desc')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
   const [fileId,   setFileId]   = useState('')
   const [files,    setFiles]    = useState<LogFileDto[]>([])
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(null)
 
   useEffect(() => {
     api.files.list({ pageSize: 200 } as never).then(r => setFiles(r.items)).catch(console.error)
   }, [])
 
-  const fetchTab = useCallback(async (t: Tab, p: number, df: string, dt: string, fi: string, reset: boolean) => {
-    if (query.trim().length > 1) return
+  // Fetch from API
+  const fetchData = useCallback(async (t: Tab, df: string, dt: string, fi: string) => {
     setLoading(true)
     try {
       const params = { dateFrom: df || undefined, dateTo: dt || undefined, fileId: fi || undefined }
-      let items: SignatureSummary[]
-      if (t === 'all') {
-        items = await api.r5checks.summary(params)
-        // client-side pagination for all
-        setHasMore(false) // summary returns all
-      } else if (t === 'popular') {
-        items = await api.r5checks.popular(20)
-        setHasMore(false)
-      } else {
-        items = await api.r5checks.unique()
-        setHasMore(false)
-      }
-      setData(items)
+      const items = t === 'all'     ? await api.r5checks.summary(params)
+                  : t === 'popular' ? await api.r5checks.popular(50)
+                  :                   await api.r5checks.unique()
+      setRaw(items)
     } catch { /**/ }
     finally { setLoading(false) }
-  }, [query])
+  }, [])
 
-  useEffect(() => { fetchTab(tab, 1, dateFrom, dateTo, fileId, true); setPage(1) }, [tab])
+  useEffect(() => { fetchData(tab, dateFrom, dateTo, fileId) }, [tab])
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault(); if (!query.trim()) return
-    setLoading(true)
-    api.r5checks.search(query).then(d => { setData(d); setHasMore(false) }).finally(() => setLoading(false))
+  // Sort + client-side search
+  useEffect(() => {
+    let items = [...raw]
+    const q = query.trim().toLowerCase()
+    if (q) {
+      items = items.filter(s =>
+        s.conditionText?.toLowerCase().includes(q) ||
+        s.whereText?.toLowerCase().includes(q) ||
+        s.sourceFile?.toLowerCase().includes(q)
+      )
+    }
+    items.sort((a, b) => {
+      let av: number | string = 0, bv: number | string = 0
+      if (sortBy === 'totalCount')   { av = a.totalCount;  bv = b.totalCount }
+      if (sortBy === 'fileCount')    { av = a.fileCount;   bv = b.fileCount }
+      if (sortBy === 'lastSeen')     { av = a.lastSeen;    bv = b.lastSeen }
+      if (sortBy === 'firstSeen')    { av = a.firstSeen;   bv = b.firstSeen }
+      if (sortBy === 'conditionText'){ av = a.conditionText ?? ''; bv = b.conditionText ?? '' }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    setDisplay(items)
+  }, [raw, query, sortBy, sortDir])
+
+  function handleSort(col: SortBy) {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(col); setSortDir('desc') }
   }
 
-  function applyFilters() { fetchTab(tab, 1, dateFrom, dateTo, fileId, true) }
-  function clearFilters() { setDateFrom(''); setDateTo(''); setFileId(''); fetchTab(tab, 1, '', '', '', true) }
+  // Debounced search input
+  function handleSearchInput(v: string) {
+    setQuery(v)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    // immediate client-side filter — no debounce needed since it's local
+  }
+
+  function applyFilters() { fetchData(tab, dateFrom, dateTo, fileId) }
+  function clearFilters() { setDateFrom(''); setDateTo(''); setFileId(''); fetchData(tab, '', '', '') }
 
   const hasFilters = dateFrom || dateTo || fileId
+  const uniqueCount = raw.filter(s => s.totalCount === 1).length
 
-  // Unique count from data
-  const uniqueCount = data.filter(s => s.totalCount === 1).length
 
   return (
     <div>
@@ -67,33 +112,34 @@ export function R5ChecksPage() {
           <div>
             <h1 style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: '-0.025em' }}>R5 Checks</h1>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
-              {data.length > 0 && `${data.length} signatures${tab === 'unique' ? '' : ''}`}
+              {loading ? 'Loading…' : `${display.length}${display.length !== raw.length ? ` / ${raw.length}` : ''} signatures`}
             </p>
           </div>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 6 }}>
-            <div style={{ position: 'relative' }}>
-              <svg style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input className="input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search condition, file…" style={{ paddingLeft: 28, width: 230, fontSize: 12 }} />
-            </div>
-            <button type="submit" className="btn btn-ghost" style={{ fontSize: 12 }}>Search</button>
-            {query && <button type="button" className="btn btn-ghost" onClick={() => { setQuery(''); fetchTab(tab, 1, dateFrom, dateTo, fileId, true) }} style={{ fontSize: 12, padding: '6px 10px' }}>✕</button>}
-          </form>
+          {/* Search — real-time client-side */}
+          <div style={{ position: 'relative' }}>
+            <svg style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'var(--text-3)', pointerEvents:'none' }}
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input className="input" value={query} onChange={e => handleSearchInput(e.target.value)}
+              placeholder="Search condition, where, file…" style={{ paddingLeft: 28, width: 260, fontSize: 12 }} />
+            {query && <button style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'var(--text-3)', fontSize:14, padding:0 }}
+              onClick={() => setQuery('')}>✕</button>}
+          </div>
         </div>
         <div className="tabs" style={{ width: 'fit-content' }}>
           {(['all', 'popular', 'unique'] as Tab[]).map(t => (
             <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => { setTab(t); setQuery('') }}>
-              {t === 'unique' ? `Unique${uniqueCount > 0 && tab !== 'unique' ? ` (${uniqueCount})` : ''}` : t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === 'unique' ? `Unique (${uniqueCount})` : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Filter bar — only for "all" tab */}
+      {/* Filters — only for "all" tab */}
       {tab === 'all' && (
         <div style={{ padding: '10px 28px', borderBottom: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filters
-          </span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Filters</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="date" className="input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: 11, padding: '4px 8px', colorScheme: 'light' }} />
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>—</span>
@@ -106,7 +152,6 @@ export function R5ChecksPage() {
           </select>
           <button className="btn btn-primary" onClick={applyFilters} style={{ fontSize: 11, padding: '4px 10px' }}>Apply</button>
           {hasFilters && <button className="btn btn-ghost" onClick={clearFilters} style={{ fontSize: 11, padding: '4px 9px' }}>Clear</button>}
-          {hasFilters && <span className="badge badge-amber">Filtered</span>}
         </div>
       )}
 
@@ -114,23 +159,27 @@ export function R5ChecksPage() {
         <div className="card" style={{ overflow: 'hidden' }}>
           <table className="data-table">
             <thead><tr>
-              <th>Condition</th><th>Where</th><th>Source File</th>
-              <th style={{ textAlign: 'center' }}>Files</th>
-              <th style={{ textAlign: 'right' }}>Count</th>
-              <th style={{ textAlign: 'right' }}>Last Seen</th>
+              <SortHeader label="Condition"  col="conditionText" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <th>Where</th>
+              <th>Source File</th>
+              <SortHeader label="Files"  col="fileCount"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
+              <SortHeader label="Count"  col="totalCount" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} style={{ textAlign: 'right' }} />
+              <SortHeader label="First"  col="firstSeen"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} style={{ textAlign: 'right' }} />
+              <SortHeader label="Last"   col="lastSeen"   sortBy={sortBy} sortDir={sortDir} onSort={handleSort} style={{ textAlign: 'right' }} />
             </tr></thead>
             <tbody>
-              {loading && data.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}><span className="animate-pulse">Loading…</span></td></tr>}
-              {!loading && data.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>{hasFilters ? 'No results for current filters' : 'No events found'}</td></tr>}
-              {data.map((s, i) => (
-                <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i,20) * 15}ms` }}
+              {loading && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}><span className="animate-pulse">Loading…</span></td></tr>}
+              {!loading && display.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>No results</td></tr>}
+              {!loading && display.map((s, i) => (
+                <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i,20)*15}ms` }}
                   onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
-                  <td><Link to={`/r5checks/${s.id}`} style={{ color: 'var(--amber)', textDecoration: 'none', fontFamily: 'Geist Mono,monospace', fontSize: 12, fontWeight: 500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
-                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.whereText}>{s.whereText}</td>
-                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
-                  <td style={{ textAlign: 'center' }}><span className="badge badge-gray">{s.fileCount}</span></td>
-                  <td style={{ textAlign: 'right' }}><span className="badge badge-red">{s.totalCount}</span></td>
-                  <td style={{ textAlign: 'right', fontFamily: 'Geist Mono,monospace', fontSize: 11 }}>{new Date(s.lastSeen).toLocaleDateString()}</td>
+                  <td><Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
+                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.whereText}>{s.whereText}</td>
+                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
+                  <td style={{ textAlign:'center' }}><span className="badge badge-gray">{s.fileCount}</span></td>
+                  <td style={{ textAlign:'right' }}><span className="badge badge-red">{s.totalCount}</span></td>
+                  <td style={{ textAlign:'right', fontFamily:'Geist Mono,monospace', fontSize:11 }}>{new Date(s.firstSeen).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
+                  <td style={{ textAlign:'right', fontFamily:'Geist Mono,monospace', fontSize:11 }}>{new Date(s.lastSeen).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
                 </tr>
               ))}
             </tbody>

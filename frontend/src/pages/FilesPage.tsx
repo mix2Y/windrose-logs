@@ -153,9 +153,10 @@ export function FilesPage() {
                 </td></tr>
               )}
               {files.map((f, i) => (
-                <tr key={f.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i,20) * 15}ms`, cursor: f.status === 'done' ? 'pointer' : 'default' }}
-                  onClick={() => f.status === 'done' && navigate(`/files/${f.id}`)}>
-                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 12, color: f.status === 'done' ? 'var(--blue)' : 'var(--text)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.fileName}</td>
+                <tr key={f.id} className="animate-fade-in"
+                  style={{ animationDelay: `${Math.min(i,20) * 15}ms`, cursor: 'pointer' }}
+                  onClick={() => navigate(`/files/${f.id}`)}>
+                  <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 12, color: 'var(--blue)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.fileName}</td>
                   <td><span className="badge badge-gray">{f.source}</span></td>
                   <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-2)' }}>{fmtSession(f.sessionDate)}</td>
                   <td><StatusBadge status={f.status} /></td>
