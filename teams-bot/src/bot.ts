@@ -108,9 +108,13 @@ export class WindroseBot extends ActivityHandler {
 
     // ── File attachment ──────────────────────────────────────────────────────
     const attachments = activity.attachments ?? []
-    const logFiles = attachments.filter(a =>
-      a.name?.endsWith('.log') || a.name?.endsWith('.zip')
-    )
+    // Teams sends files as vnd.microsoft.teams.file.download.info with downloadUrl in content
+    const logFiles = attachments.filter(a => {
+      const name = a.name ?? ''
+      const isFileDownload = a.contentType === 'application/vnd.microsoft.teams.file.download.info'
+      const isLogOrZip = name.endsWith('.log') || name.endsWith('.zip')
+      return isFileDownload && isLogOrZip
+    })
 
     if (logFiles.length > 0) {
       await ctx.sendActivity(MessageFactory.text(`⏳ Загружаю ${logFiles.length} файл(а)...`))
@@ -119,16 +123,13 @@ export class WindroseBot extends ActivityHandler {
 
       for (const att of logFiles) {
         try {
-          const token = (activity.channelData?.tenant as any)?.id
-            ? await this.getTeamsToken(ctx)
-            : null
-          let buf: Buffer
-          if (token && att.contentUrl) {
-            buf = await downloadFile(att.contentUrl, token)
-          } else if (att.contentUrl) {
-            const r = await fetch(att.contentUrl)
-            buf = Buffer.from(await r.arrayBuffer())
-          } else continue
+          // Teams files come with downloadUrl inside content object
+          const downloadUrl = (att.content as any)?.downloadUrl ?? att.contentUrl
+          if (!downloadUrl) { results.push(`❌ \`${att.name}\` — нет URL для скачивания`); continue }
+
+          const r = await fetch(downloadUrl)
+          if (!r.ok) throw new Error(`Download failed: ${r.status}`)
+          const buf = Buffer.from(await r.arrayBuffer())
 
           const res = await uploadLog(buf, att.name!, uploaderName)
           const files = res.files ?? [res]
