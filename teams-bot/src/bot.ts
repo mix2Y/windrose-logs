@@ -88,7 +88,13 @@ export class WindroseBot extends ActivityHandler {
   private async handleMessage(ctx: TurnContext) {
     const activity  = ctx.activity
     const uploaderName = activity.from?.name ?? activity.from?.id ?? 'Teams user'
-    const text = (activity.text ?? '').trim().toLowerCase()
+
+    // Strip @mention HTML tags: "<at>Windrose Logs</at> !stats" → "!stats"
+    const rawText = (activity.text ?? '')
+      .replace(/<at[^>]*>.*?<\/at>/gi, '')  // remove <at>BotName</at>
+      .replace(/&nbsp;/gi, ' ')
+      .trim()
+    const text = rawText.toLowerCase()
 
     // ── File attachment ──────────────────────────────────────────────────────
     const attachments = activity.attachments ?? []
