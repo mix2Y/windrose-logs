@@ -27,36 +27,38 @@ services:
   api:
     image: ghcr.io/${GITHUB_REPOSITORY}/windrose-api:${IMAGE_TAG:-latest}
     container_name: windrose-api
+    ports:
+      - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       - AzureAd__TenantId=${AZURE_TENANT_ID}
       - AzureAd__ClientId=${AZURE_CLIENT_ID}
-      - Frontend__Url=${FRONTEND_URL}
+      - AzureAd__Audience=api://${AZURE_CLIENT_ID}
+      - Frontend__Url=https://${DOMAIN}
+      - BulkImport__ApiKey=${BULK_IMPORT_API_KEY}
     volumes:
-      - log_storage:/app/storage
+      - /opt/windrose-logs/storage:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - internal
-      - web
     restart: unless-stopped
 
   frontend:
     image: ghcr.io/${GITHUB_REPOSITORY}/windrose-frontend:${IMAGE_TAG:-latest}
     container_name: windrose-frontend
+    ports:
+      - "3000:80"
     networks:
-      - web
+      - internal
     restart: unless-stopped
 
 networks:
   internal:
     driver: bridge
-  web:
-    external: true
 
 volumes:
   postgres_data:
-  log_storage:
