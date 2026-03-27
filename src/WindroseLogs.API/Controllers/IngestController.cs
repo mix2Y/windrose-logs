@@ -2,6 +2,7 @@ using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
 using WindroseLogs.Infrastructure.Data;
 using WindroseLogs.Infrastructure.Jobs;
 using WindroseLogs.Core.Models;
@@ -17,30 +18,79 @@ public class IngestController(
     IConfiguration config) : ControllerBase
 {
     [HttpPost("upload")]
-    [RequestSizeLimit(200 * 1024 * 1024)]
+    [RequestSizeLimit(500 * 1024 * 1024)]
     public async Task<IActionResult> Upload(IFormFile file, CancellationToken ct)
     {
         if (file is null || file.Length == 0) return BadRequest("File is required");
-        if (!file.FileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .log files are accepted");
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
+        var results = new List<object>();
+        var userId  = GetUserId();
+
+        if (ext == ".zip")
+        {
+            using var stream = file.OpenReadStream();
+            using var zip    = new ZipArchive(stream, ZipArchiveMode.Read);
+            foreach (var entry in zip.Entries)
+            {
+                if (!entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)) continue;
+                await using var es = entry.Open();
+                results.Add(await IngestLog(es, entry.Name, userId, ct));
+            }
+        }
+        else if (ext == ".log")
+        {
+            await using var stream = file.OpenReadStream();
+            results.Add(await IngestLog(stream, file.FileName, userId, ct));
+        }
+        else return BadRequest("Only .log and .zip files are accepted");
+
+        return Ok(results.Count == 1 ? results[0] : new { imported = results.Count, files = results });
+    }
+
+    [HttpPost("upload-many")]
+    [RequestSizeLimit(500 * 1024 * 1024)]
+    public async Task<IActionResult> UploadMany(List<IFormFile> files, CancellationToken ct)
+    {
+        if (files is null || files.Count == 0) return BadRequest("No files provided");
+        var results = new List<object>();
+        var userId  = GetUserId();
+        foreach (var file in files)
+        {
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (ext == ".zip")
+            {
+                using var stream = file.OpenReadStream();
+                using var zip    = new ZipArchive(stream, ZipArchiveMode.Read);
+                foreach (var entry in zip.Entries)
+                {
+                    if (!entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)) continue;
+                    await using var es = entry.Open();
+                    results.Add(await IngestLog(es, entry.Name, userId, ct));
+                }
+            }
+            else if (ext == ".log")
+            {
+                await using var stream = file.OpenReadStream();
+                results.Add(await IngestLog(stream, file.FileName, userId, ct));
+            }
+        }
+        return Ok(new { imported = results.Count, files = results });
+    }
+
+    private async Task<object> IngestLog(Stream stream, string fileName, Guid userId, CancellationToken ct)
+    {
         var logFile = new LogFile {
-            Id = Guid.NewGuid(), FileName = file.FileName, Source = "web_upload",
-            SessionDate = TryParseSessionDate(file.FileName),
-            UploadedBy = GetUserId(), Status = "pending"
+            Id = Guid.NewGuid(), FileName = fileName, Source = "web_upload",
+            SessionDate = TryParseSessionDate(fileName), UploadedBy = userId, Status = "pending"
         };
-
-        var storagePath = LogParsingJob.GetStoragePath(logFile.Id, file.FileName);
-        await using (var stream = System.IO.File.Create(storagePath))
-            await file.CopyToAsync(stream, ct);
-
+        var storagePath = LogParsingJob.GetStoragePath(logFile.Id, fileName);
+        await using (var dest = System.IO.File.Create(storagePath))
+            await stream.CopyToAsync(dest, ct);
         db.LogFiles.Add(logFile);
         await db.SaveChangesAsync(ct);
-
-        var jobId = jobs.Enqueue<LogParsingJob>(j =>
-            j.ProcessFileAsync(logFile.Id, CancellationToken.None));
-
-        return Ok(new { fileId = logFile.Id, jobId, status = "pending" });
+        var jobId = jobs.Enqueue<LogParsingJob>(j => j.ProcessFileAsync(logFile.Id, CancellationToken.None));
+        return new { fileId = logFile.Id, jobId, fileName, status = "pending" };
     }
 
     [HttpPost("teams")]

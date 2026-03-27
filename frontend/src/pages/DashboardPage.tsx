@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, SignatureSummary } from '../lib/api'
+import { pushToast } from '../hooks/useToasts'
 
 // Mini bar chart using SVG — no recharts needed for this simple case
 function TimelineChart({ data }: { data: { date: string; count: number }[] }) {
@@ -98,12 +99,38 @@ export function DashboardPage() {
     : '—'
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
+    const selected = Array.from(e.target.files ?? [])
+    if (!selected.length) return
     setUploading(true); setMsg(null)
+    const uploadedAt = new Date()
     try {
-      await api.ingest.upload(file)
-      setMsg({ text: `${file.name} uploaded`, ok: true })
-      setTimeout(() => api.r5checks.summary().then(setSummary), 2500)
+      const results = await api.ingest.upload(selected)
+      const count = results.filter((r: any) => !r.skipped).length
+      setMsg({ text: `${count} file${count !== 1 ? 's' : ''} uploaded`, ok: true })
+      // Poll & alert
+      const ids = results.map((r: any) => r.fileId).filter(Boolean)
+      if (ids.length) {
+        let attempts = 0
+        const iv = setInterval(async () => {
+          if (++attempts > 40) { clearInterval(iv); return }
+          try {
+            const r = await api.files.list({ pageSize: ids.length + 5 })
+            const done = r.items.filter((f: any) => ids.includes(f.id) && (f.status === 'done' || f.status === 'error'))
+            if (done.length < ids.length) return
+            clearInterval(iv)
+            const newSigs = await api.r5checks.newSince(uploadedAt)
+            if (newSigs.length > 0) {
+              pushToast({
+                type: 'alert',
+                title: `${newSigs.length} new R5Check signature${newSigs.length > 1 ? 's' : ''} detected`,
+                body: newSigs.slice(0, 2).map((s: any) => s.conditionText).join('\n') + (newSigs.length > 2 ? `\n+${newSigs.length - 2} more` : ''),
+                duration: 10000,
+              })
+            }
+            api.r5checks.summary().then(setSummary)
+          } catch { /* */ }
+        }, 3000)
+      }
     } catch { setMsg({ text: 'Upload failed', ok: false }) }
     finally { setUploading(false); e.target.value = '' }
   }
@@ -117,7 +144,7 @@ export function DashboardPage() {
           <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>Overview of all processed log sessions</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-          <input ref={fileRef} type="file" accept=".log" style={{ display: 'none' }} onChange={handleUpload} />
+          <input ref={fileRef} type="file" accept=".log,.zip" multiple style={{ display: 'none' }} onChange={handleUpload} />
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
             {uploading ? <>
               <span style={{ width: 11, height: 11, borderRadius: '50%', border: '2px solid transparent', borderTopColor: 'currentColor', display: 'inline-block' }} className="animate-spin"/>

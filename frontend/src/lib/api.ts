@@ -114,6 +114,10 @@ export const api = {
       request<SignatureSummary[]>(`/r5checks/search?q=${encodeURIComponent(q)}&page=${page}`),
     timeline: (days = 30) =>
       request<{ date: string; count: number }[]>(`/r5checks/timeline?days=${days}`),
+    newSince: (since: Date) =>
+      request<{ id: string; conditionText: string; sourceFile: string; firstSeen: string; totalCount: number }[]>(
+        `/r5checks/new-since?since=${since.toISOString()}`
+      ),
   },
 
   memoryLeaks: {
@@ -141,17 +145,28 @@ export const api = {
   },
 
   ingest: {
-    upload: async (file: File) => {
+    upload: async (files: File | File[]) => {
       const token = await getToken()
+      const arr = Array.isArray(files) ? files : [files]
+      // single .log → /upload, multiple or zip → /upload-many
+      if (arr.length === 1 && arr[0].name.endsWith('.log')) {
+        const form = new FormData()
+        form.append('file', arr[0])
+        const res = await fetch('/api/ingest/upload', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+        })
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+        const data = await res.json()
+        return Array.isArray(data.files) ? data.files : [data]
+      }
       const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/ingest/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
+      arr.forEach(f => form.append('files', f))
+      const res = await fetch('/api/ingest/upload-many', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
       })
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-      return res.json() as Promise<{ fileId: string; jobId: string; status: string }>
+      const data = await res.json()
+      return (data.files ?? [data]) as { fileId: string; fileName: string; status: string }[]
     },
     requeuePending: () => request<{ queued: number }>('/ingest/requeue-pending', { method: 'POST' }),
   },

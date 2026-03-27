@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api, LogFileDto } from '../lib/api'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
+import { pushToast } from '../hooks/useToasts'
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = { done:'badge-green', error:'badge-red', processing:'badge-blue', pending:'badge-gray' }
@@ -86,14 +87,54 @@ export function FilesPage() {
   const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loading)
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
+    const selected = Array.from(e.target.files ?? [])
+    if (!selected.length) return
     setUploading(true); setMsg(null)
+    const uploadedAt = new Date()
     try {
-      await api.ingest.upload(file)
-      setMsg({ text: `${file.name} uploaded`, ok: true })
+      const results = await api.ingest.upload(selected)
+      const count = results.filter((r: any) => !(r as any).skipped).length
+      const skipped = results.length - count
+      setMsg({
+        text: `${count} file${count !== 1 ? 's' : ''} uploaded${skipped ? `, ${skipped} skipped (duplicate)` : ''}`,
+        ok: true,
+      })
       fetchPage(1, dateFrom, dateTo, status, true)
+      // Poll for completion then check for new signatures
+      pollForAlerts(results.map((r: any) => r.fileId).filter(Boolean), uploadedAt)
     } catch { setMsg({ text: 'Upload failed', ok: false }) }
     finally { setUploading(false); e.target.value = '' }
+  }
+
+  function pollForAlerts(fileIds: string[], since: Date) {
+    if (!fileIds.length) return
+    let attempts = 0
+    const interval = setInterval(async () => {
+      attempts++
+      if (attempts > 40) { clearInterval(interval); return } // stop after ~2 min
+      try {
+        // Check if any of the uploaded files are done
+        const r = await api.files.list({ pageSize: fileIds.length + 10 })
+        const uploaded = r.items.filter(f => fileIds.includes(f.id))
+        const allDone  = uploaded.length > 0 && uploaded.every(f => f.status === 'done' || f.status === 'error')
+        if (!allDone) return
+        clearInterval(interval)
+        // Check for new R5Check signatures
+        const newSigs = await api.r5checks.newSince(since)
+        if (newSigs.length > 0) {
+          pushToast({
+            type: 'alert',
+            title: `${newSigs.length} new R5Check signature${newSigs.length > 1 ? 's' : ''} detected`,
+            body: newSigs.slice(0, 2).map(s => s.conditionText).join('\n')
+              + (newSigs.length > 2 ? `\n+${newSigs.length - 2} more` : ''),
+            duration: 10000,
+          })
+        } else {
+          pushToast({ type: 'success', title: `Parsing complete`, body: `${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} processed, no new signatures` })
+        }
+        fetchPage(1, dateFrom, dateTo, status, true)
+      } catch { /* ignore */ }
+    }, 3000)
   }
 
   const hasFilters = dateFrom || dateTo || status
@@ -108,11 +149,11 @@ export function FilesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-          <input ref={fileRef} type="file" accept=".log" style={{ display: 'none' }} onChange={handleUpload} />
+          <input ref={fileRef} type="file" accept=".log,.zip" multiple style={{ display: 'none' }} onChange={handleUpload} />
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
             {uploading
-              ? <><span style={{ width:11,height:11,borderRadius:'50%',border:'2px solid transparent',borderTopColor:'currentColor',display:'inline-block' }} className="animate-spin"/>Processing…</>
-              : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload .log</>}
+              ? <><span style={{ width:11,height:11,borderRadius:'50%',border:'2px solid transparent',borderTopColor:'currentColor',display:'inline-block' }} className="animate-spin"/>Uploading…</>
+              : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload .log / .zip</>}
           </button>
           {msg && <span style={{ fontSize: 11, color: msg.ok ? 'var(--green)' : 'var(--red)' }}>{msg.ok ? '✓' : '✗'} {msg.text}</span>}
         </div>

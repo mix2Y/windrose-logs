@@ -115,6 +115,20 @@ public class R5ChecksController(AppDbContext db) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Сигнатуры созданные после указанного времени — для алертов на UI</summary>
+    [HttpGet("new-since")]
+    public async Task<IActionResult> NewSince(
+        [FromQuery] DateTime since, CancellationToken ct)
+    {
+        var sinceUtc = since.Kind == DateTimeKind.Utc ? since : since.ToUniversalTime();
+        var result = await db.EventSignatures
+            .Where(s => s.EventType == "R5Check" && s.FirstSeen >= sinceUtc)
+            .OrderByDescending(s => s.FirstSeen)
+            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.FirstSeen, s.TotalCount })
+            .ToListAsync(ct);
+        return Ok(result);
+    }
+
     /// <summary>События по дням для графика на Dashboard</summary>
     [HttpGet("timeline")]
     public async Task<IActionResult> Timeline(

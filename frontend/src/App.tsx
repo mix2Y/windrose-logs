@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react'
 import { Layout } from './components/layout/Layout'
+import { Toaster } from './components/ui/Toaster'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { R5ChecksPage } from './pages/R5ChecksPage'
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/admin"         element={<AdminPage />} />
           </Routes>
         </Layout>
+        <Toaster />
       </AuthenticatedTemplate>
     </BrowserRouter>
   )
