@@ -5,6 +5,7 @@ using Microsoft.Identity.Web;
 using WindroseLogs.Infrastructure.Data;
 using WindroseLogs.Infrastructure.Jobs;
 using WindroseLogs.Infrastructure.Parsing;
+using WindroseLogs.API.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Azure AD Auth ──────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ builder.Services.AddHangfireServer();
 // ── Application Services ───────────────────────────────────────────────────────
 builder.Services.AddScoped<R5LogParser>();
 builder.Services.AddScoped<LogParsingJob>();
+builder.Services.AddScoped<IngestService>();
 
 // ── Web ────────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();

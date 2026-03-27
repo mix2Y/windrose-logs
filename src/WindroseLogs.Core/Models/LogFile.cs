@@ -8,6 +8,7 @@ public class LogFile
     public DateOnly? SessionDate { get; set; }         // Парсится из имени файла
     public Guid UploadedBy { get; set; }
     public string? UploaderName { get; set; }          // Display name (Teams user or email)
+    public string? FileHash     { get; set; }          // MD5 of file content for dedup/reparse
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
     public string Status { get; set; } = "pending";    // pending|processing|done|error
     public string? ErrorMessage { get; set; }
