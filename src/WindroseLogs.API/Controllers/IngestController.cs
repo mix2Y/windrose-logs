@@ -13,30 +13,23 @@ namespace WindroseLogs.API.Controllers;
 [Authorize]
 public class IngestController(
     AppDbContext db,
-    IBackgroundJobClient jobs) : ControllerBase
+    IBackgroundJobClient jobs,
+    IConfiguration config) : ControllerBase
 {
     [HttpPost("upload")]
-    [RequestSizeLimit(200 * 1024 * 1024)] // 200MB max
+    [RequestSizeLimit(200 * 1024 * 1024)]
     public async Task<IActionResult> Upload(IFormFile file, CancellationToken ct)
     {
-        if (file is null || file.Length == 0)
-            return BadRequest("File is required");
-
+        if (file is null || file.Length == 0) return BadRequest("File is required");
         if (!file.FileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only .log files are accepted");
 
-        var userId = GetUserId();
-        var logFile = new LogFile
-        {
-            Id = Guid.NewGuid(),
-            FileName = file.FileName,
-            Source = "web_upload",
+        var logFile = new LogFile {
+            Id = Guid.NewGuid(), FileName = file.FileName, Source = "web_upload",
             SessionDate = TryParseSessionDate(file.FileName),
-            UploadedBy = userId,
-            Status = "pending"
+            UploadedBy = GetUserId(), Status = "pending"
         };
 
-        // Сохраняем файл на диск
         var storagePath = LogParsingJob.GetStoragePath(logFile.Id, file.FileName);
         await using (var stream = System.IO.File.Create(storagePath))
             await file.CopyToAsync(stream, ct);
@@ -44,29 +37,21 @@ public class IngestController(
         db.LogFiles.Add(logFile);
         await db.SaveChangesAsync(ct);
 
-        // Ставим в очередь
         var jobId = jobs.Enqueue<LogParsingJob>(j =>
             j.ProcessFileAsync(logFile.Id, CancellationToken.None));
 
         return Ok(new { fileId = logFile.Id, jobId, status = "pending" });
     }
 
-    /// <summary>Endpoint для Teams Bot — принимает файл из Teams</summary>
     [HttpPost("teams")]
     public async Task<IActionResult> TeamsUpload(
         [FromBody] TeamsFileUploadRequest request, CancellationToken ct)
     {
-        // Teams Bot скачивает файл и присылает bytes + метаданные
         var bytes = Convert.FromBase64String(request.ContentBase64);
-
-        var logFile = new LogFile
-        {
-            Id = Guid.NewGuid(),
-            FileName = request.FileName,
-            Source = "teams_bot",
+        var logFile = new LogFile {
+            Id = Guid.NewGuid(), FileName = request.FileName, Source = "teams_bot",
             SessionDate = TryParseSessionDate(request.FileName),
-            UploadedBy = GetBotUserId(),
-            Status = "pending"
+            UploadedBy = GetBotUserId(), Status = "pending"
         };
 
         var storagePath = LogParsingJob.GetStoragePath(logFile.Id, request.FileName);
@@ -74,21 +59,34 @@ public class IngestController(
 
         db.LogFiles.Add(logFile);
         await db.SaveChangesAsync(ct);
-
-        jobs.Enqueue<LogParsingJob>(j =>
-            j.ProcessFileAsync(logFile.Id, CancellationToken.None));
+        jobs.Enqueue<LogParsingJob>(j => j.ProcessFileAsync(logFile.Id, CancellationToken.None));
 
         return Ok(new { fileId = logFile.Id, fileName = request.FileName });
     }
 
-    /// <summary>
-    /// Ставит все pending файлы в очередь Hangfire.
-    /// Используется после ручного сброса статусов в БД.
-    /// </summary>
+    /// <summary>Requeue pending files — requires Azure AD auth</summary>
     [HttpPost("requeue-pending")]
-    [Authorize]
     public async Task<IActionResult> RequeuePending(CancellationToken ct)
     {
+        var pending = await db.LogFiles
+            .Where(f => f.Status == "pending")
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+
+        foreach (var id in pending)
+            jobs.Enqueue<LogParsingJob>(j => j.ProcessFileAsync(id, CancellationToken.None));
+
+        return Ok(new { queued = pending.Count });
+    }
+
+    /// <summary>Requeue pending files — internal, uses bulk API key (no JWT needed)</summary>
+    [HttpPost("requeue-pending-key")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RequeuePendingByKey(
+        [FromHeader(Name = "X-Api-Key")] string? apiKey, CancellationToken ct)
+    {
+        if (apiKey != config["BulkImport:ApiKey"]) return Unauthorized();
+
         var pending = await db.LogFiles
             .Where(f => f.Status == "pending")
             .Select(f => f.Id)
@@ -111,12 +109,8 @@ public class IngestController(
 
     private static DateOnly? TryParseSessionDate(string fileName)
     {
-        // client_log_Dea1h_2026-03-17_12-16-55.log
-        var match = System.Text.RegularExpressions.Regex.Match(
-            fileName, @"(\d{4}-\d{2}-\d{2})");
-        if (match.Success && DateOnly.TryParse(match.Groups[1].Value, out var date))
-            return date;
-        return null;
+        var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d{4}-\d{2}-\d{2})");
+        return match.Success && DateOnly.TryParse(match.Groups[1].Value, out var d) ? d : null;
     }
 }
 
