@@ -41,6 +41,8 @@ const STATUS_OPTIONS = ['', 'done', 'error', 'processing', 'pending']
 export function FilesPage() {
   const [files, setFiles]       = useState<LogFileDto[]>([])
   const [total, setTotal]       = useState(0)
+  const [page,  setPage]        = useState(1)
+  const PAGE_SIZE = 100
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg]           = useState<{ text: string; ok: boolean } | null>(null)
   const [dateFrom, setDateFrom] = useState('')
@@ -49,32 +51,35 @@ export function FilesPage() {
   const fileRef  = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
-  function loadFiles(df = dateFrom, dt = dateTo, st = status) {
+  function loadFiles(p = page, df = dateFrom, dt = dateTo, st = status) {
     api.files.list({
+      page:     p,
+      pageSize: PAGE_SIZE,
       dateFrom: df || undefined,
       dateTo:   dt || undefined,
       status:   st || undefined,
     }).then(r => { setFiles(r.items); setTotal(r.total) }).catch(console.error)
   }
 
-  useEffect(() => { loadFiles() }, [])
+  useEffect(() => { loadFiles(page) }, [page])
 
   // Auto-refresh while pending/processing
   useEffect(() => {
     const pending = files.some(f => f.status === 'pending' || f.status === 'processing')
     if (!pending) return
-    const t = setTimeout(() => loadFiles(), 3000)
+    const t = setTimeout(() => loadFiles(page), 3000)
     return () => clearTimeout(t)
   }, [files])
 
-  function applyFilters() { loadFiles(dateFrom, dateTo, status) }
+  function applyFilters() { setPage(1); loadFiles(1, dateFrom, dateTo, status) }
 
   function clearFilters() {
-    setDateFrom(''); setDateTo(''); setStatus('')
-    loadFiles('', '', '')
+    setDateFrom(''); setDateTo(''); setStatus(''); setPage(1)
+    loadFiles(1, '', '', '')
   }
 
   const hasFilters = dateFrom || dateTo || status
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
@@ -218,6 +223,33 @@ export function FilesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-ghost" disabled={page === 1}
+                onClick={() => setPage(p => p - 1)} style={{ fontSize: 12 }}>← Prev</button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const p = totalPages <= 7 ? i + 1
+                  : page <= 4 ? i + 1
+                  : page >= totalPages - 3 ? totalPages - 6 + i
+                  : page - 3 + i
+                return (
+                  <button key={p} className={`btn ${p === page ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setPage(p)} style={{ fontSize: 12, minWidth: 32, padding: '5px 8px' }}>
+                    {p}
+                  </button>
+                )
+              })}
+              <button className="btn btn-ghost" disabled={page === totalPages}
+                onClick={() => setPage(p => p + 1)} style={{ fontSize: 12 }}>Next →</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
