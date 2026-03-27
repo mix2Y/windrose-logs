@@ -43,18 +43,21 @@ public class FilesController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> Details(Guid id, CancellationToken ct)
     {
         var file = await db.LogFiles
-            .Include(f => f.Uploader)
-            .FirstOrDefaultAsync(f => f.Id == id, ct);
+            .Where(f => f.Id == id)
+            .Select(f => new {
+                f.Id, f.FileName, f.Source, f.SessionDate,
+                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound
+            })
+            .FirstOrDefaultAsync(ct);
+
         if (file is null) return NotFound();
 
-        // Event type breakdown
         var eventCounts = await db.LogEvents
             .Where(e => e.FileId == id)
             .GroupBy(e => e.EventType)
             .Select(g => new { EventType = g.Key, Count = g.Count() })
             .ToListAsync(ct);
 
-        // Top signatures found in this file
         var topSignatures = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "R5Check")
             .GroupBy(e => e.SignatureId)
