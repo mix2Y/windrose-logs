@@ -86,7 +86,7 @@ public class IngestController(
     /// Используется после ручного сброса статусов в БД.
     /// </summary>
     [HttpPost("requeue-pending")]
-    [Authorize(Policy = "Admin")]
+    [Authorize]
     public async Task<IActionResult> RequeuePending(CancellationToken ct)
     {
         var pending = await db.LogFiles
