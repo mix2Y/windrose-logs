@@ -107,10 +107,17 @@ export function FileDetailPage() {
         <div>
           <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>R5Check Signatures in this File</div>
           <div className="card" style={{ overflow:'hidden' }}>
-            <table className="data-table">
+            <table className="data-table" style={{ tableLayout:'fixed', width:'100%' }}>
+              <colgroup>
+                <col style={{ width:'38%' }}/>
+                <col style={{ width:'38%' }}/>
+                <col style={{ width:'12%' }}/>
+                <col style={{ width:'12%' }}/>
+              </colgroup>
               <thead><tr>
-                <th>Condition</th><th>Source File</th>
-                <th style={{ textAlign:'right' }}>In this file</th>
+                <th>Condition</th>
+                <th>Source File</th>
+                <th style={{ textAlign:'right' }}>In file</th>
                 <th style={{ textAlign:'right' }}>Total</th>
               </tr></thead>
               <tbody>
@@ -118,8 +125,10 @@ export function FileDetailPage() {
                 {sigs.map((s, i) => (
                   <tr key={s.id} className="animate-fade-in" style={{ animationDelay:`${i*15}ms`, cursor:'pointer' }}
                     onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
-                    <td><Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
-                    <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
+                    <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link>
+                    </td>
+                    <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.sourceFile ?? ''}>{s.sourceFile ?? '—'}</td>
                     <td style={{ textAlign:'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>
                     <td style={{ textAlign:'right' }}><span className="badge badge-gray">{s.totalCount}</span></td>
                   </tr>

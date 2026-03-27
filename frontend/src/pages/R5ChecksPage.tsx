@@ -157,7 +157,16 @@ export function R5ChecksPage() {
 
       <div style={{ padding: '20px 28px' }}>
         <div className="card" style={{ overflow: 'hidden' }}>
-          <table className="data-table">
+          <table className="data-table" style={{ tableLayout:'fixed', width:'100%' }}>
+            <colgroup>
+              <col style={{ width:'22%' }}/>  {/* Condition */}
+              <col style={{ width:'22%' }}/>  {/* Where */}
+              <col style={{ width:'18%' }}/>  {/* Source File */}
+              <col style={{ width:'7%' }}/>   {/* Files */}
+              <col style={{ width:'7%' }}/>   {/* Count */}
+              <col style={{ width:'12%' }}/>  {/* First */}
+              <col style={{ width:'12%' }}/>  {/* Last */}
+            </colgroup>
             <thead><tr>
               <SortHeader label="Condition"  col="conditionText" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <th>Where</th>
@@ -173,9 +182,11 @@ export function R5ChecksPage() {
               {!loading && display.map((s, i) => (
                 <tr key={s.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i,20)*15}ms` }}
                   onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
-                  <td><Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link></td>
-                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.whereText}>{s.whereText}</td>
-                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{s.sourceFile ?? '—'}</td>
+                  <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link>
+                  </td>
+                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.whereText ?? ''}>{s.whereText ?? '—'}</td>
+                  <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.sourceFile ?? ''}>{s.sourceFile ?? '—'}</td>
                   <td style={{ textAlign:'center' }}><span className="badge badge-gray">{s.fileCount}</span></td>
                   <td style={{ textAlign:'right' }}><span className="badge badge-red">{s.totalCount}</span></td>
                   <td style={{ textAlign:'right', fontFamily:'Geist Mono,monospace', fontSize:11 }}>{new Date(s.firstSeen).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
