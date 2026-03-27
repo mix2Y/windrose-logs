@@ -14,6 +14,9 @@ env:
 jobs:
   build-api:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +49,9 @@ jobs:
 
   build-frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +96,9 @@ jobs:
     needs: [build-api, build-frontend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1
@@ -101,6 +110,6 @@ jobs:
             cd /opt/windrose-logs
             git fetch origin main && git reset --hard origin/main
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose -f docker-compose.prod.yml --env-file .env pull
-            docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate
+            docker compose -f docker-compose.local.yml --env-file .env pull
+            docker compose -f docker-compose.local.yml --env-file .env up -d --force-recreate
             docker image prune -f
