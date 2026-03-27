@@ -1,5 +1,6 @@
 using Hangfire;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WindroseLogs.Core.Models;
 using WindroseLogs.Infrastructure.Data;
 using WindroseLogs.Infrastructure.Jobs;
@@ -32,6 +33,15 @@ public class BulkImportController(
         if (file is null || file.Length == 0) return BadRequest("File is required");
         if (!file.FileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only .log files accepted");
+
+        // Skip if file with same name already exists and is done/processing
+        var existing = await db.LogFiles
+            .Where(f => f.FileName == file.FileName && f.Status != "error")
+            .OrderByDescending(f => f.UploadedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is not null)
+            return Ok(new { fileId = existing.Id, fileName = file.FileName, skipped = true, status = existing.Status });
 
         var logFile = new LogFile
         {
