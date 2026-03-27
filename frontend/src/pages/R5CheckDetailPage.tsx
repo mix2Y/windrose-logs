@@ -139,23 +139,23 @@ export function R5CheckDetailPage() {
                   {ev.callstack.length > 0 && (
                     <>
                       <div style={{ fontSize:10, fontWeight:600, color:'var(--text-3)', letterSpacing:'0.07em', marginBottom:5 }}>CALLSTACK</div>
-                      <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, background:'var(--bg-2,#0d0d0d)', border:'1px solid var(--border)', borderRadius:5, overflow:'auto', maxHeight:260, lineHeight:1.8 }}>
+                      <div style={{ fontFamily:'Geist Mono,monospace', fontSize:12, background:'#0d0d0d', border:'1px solid var(--border)', borderRadius:5, overflow:'auto', maxHeight:300, lineHeight:2 }}>
                         {ev.callstack.map((raw, j) => {
-                          const { addr, func, location, full } = parseCallstackLine(raw)
-                          const hasStructure = addr || func
+                          const { func, location, full } = parseCallstackLine(raw)
+                          const hasStructure = func || location
                           return (
                             <div key={j} title={full}
-                              style={{ display:'flex', gap:8, padding:'2px 12px', borderBottom: j < ev.callstack.length-1 ? '1px solid var(--border)' : undefined, opacity: j === 0 ? 1 : 0.65, transition:'opacity 0.1s' }}
-                              onMouseEnter={e => (e.currentTarget.style.opacity='1')}
-                              onMouseLeave={e => (e.currentTarget.style.opacity = j===0 ? '1' : '0.65')}>
+                              style={{ display:'flex', gap:8, padding:'3px 12px', borderBottom: j < ev.callstack.length-1 ? '1px solid rgba(255,255,255,0.06)' : undefined }}
+                              onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.06)')}
+                              onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
                               {hasStructure ? (
                                 <>
-                                  <span style={{ color:'var(--text-3)', fontSize:10, flexShrink:0, minWidth:16, paddingTop:1 }}>{j+1}</span>
-                                  <span style={{ color: j===0 ? 'var(--text)' : 'var(--text-2)', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{func || full}</span>
-                                  {location && <span style={{ color:'var(--text-3)', fontSize:10, flexShrink:0, whiteSpace:'nowrap' }}>{location.split('\\').pop()}</span>}
+                                  <span style={{ color:'rgba(255,255,255,0.3)', fontSize:11, flexShrink:0, minWidth:18, paddingTop:1 }}>{j+1}</span>
+                                  <span style={{ color: j===0 ? '#fff' : 'rgba(255,255,255,0.75)', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontSize:12 }}>{func || full}</span>
+                                  {location && <span style={{ color:'rgba(255,255,255,0.4)', fontSize:11, flexShrink:0, whiteSpace:'nowrap' }}>{location.split('\\').pop()}</span>}
                                 </>
                               ) : (
-                                <span style={{ color:'var(--text-3)', whiteSpace:'nowrap' }}>{full}</span>
+                                <span style={{ color:'rgba(255,255,255,0.5)', fontSize:12 }}>{full}</span>
                               )}
                             </div>
                           )

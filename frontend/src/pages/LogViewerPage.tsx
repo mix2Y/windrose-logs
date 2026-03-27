@@ -4,13 +4,13 @@ import { api } from '../lib/api'
 
 // Colorize a log line based on content
 function colorLine(text: string): string {
-  if (/R5Check happens|!!! R5Check/.test(text)) return 'var(--red)'
-  if (/Memory leak suspected/.test(text)) return 'var(--amber)'
-  if (/Error:/.test(text)) return '#ff6b6b'
-  if (/Warning:/.test(text)) return '#ffa94d'
-  if (/\[Callstack\]/.test(text)) return 'var(--text-3)'
-  if (/Display:/.test(text)) return 'var(--text-2)'
-  return 'var(--text-2)'
+  if (/R5Check happens|!!! R5Check/.test(text)) return '#ff6b6b'
+  if (/Memory leak suspected/.test(text)) return '#fbbf24'
+  if (/Error:/.test(text)) return '#fc8181'
+  if (/Warning:/.test(text)) return '#fcd34d'
+  if (/\[Callstack\]/.test(text)) return 'rgba(255,255,255,0.35)'
+  if (/Display:/.test(text)) return 'rgba(255,255,255,0.6)'
+  return 'rgba(255,255,255,0.75)'
 }
 
 function bgLine(text: string): string {
@@ -143,17 +143,17 @@ export function LogViewerPage() {
             onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)')}>
             {/* Line number */}
             <span style={{
-              fontFamily: 'Geist Mono,monospace', fontSize: 10, color: 'rgba(255,255,255,0.2)',
-              minWidth: 52, padding: '2px 10px 2px 6px', textAlign: 'right', flexShrink: 0,
-              userSelect: 'none', lineHeight: '1.7',
+              fontFamily: 'Geist Mono,monospace', fontSize:11, color:'rgba(255,255,255,0.25)',
+              minWidth: 56, padding: '1px 10px 1px 8px', textAlign: 'right', flexShrink: 0,
+              userSelect: 'none', lineHeight: '1.8', borderRight: '1px solid rgba(255,255,255,0.06)',
             }}>
               {line.lineNumber}
             </span>
             {/* Text */}
             <span style={{
-              fontFamily: 'Geist Mono,monospace', fontSize: 11,
+              fontFamily: 'Geist Mono,monospace', fontSize: 12,
               color: colorLine(line.text),
-              padding: '2px 16px 2px 0', lineHeight: '1.7',
+              padding: '1px 16px 1px 10px', lineHeight: '1.8',
               wordBreak: 'break-all', whiteSpace: 'pre-wrap', flex: 1,
             }}>
               {highlight(line.text, filter)}
