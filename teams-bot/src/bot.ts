@@ -98,6 +98,14 @@ export class WindroseBot extends ActivityHandler {
 
     console.log(`[MSG] from="${uploaderName}" rawText="${rawText}" text="${text}" attachments=${activity.attachments?.length ?? 0}`)
 
+    // Log full attachment details
+    if (activity.attachments?.length) {
+      activity.attachments.forEach((a, i) => {
+        console.log(`[ATT${i}] name="${a.name}" contentType="${a.contentType}" contentUrl="${a.contentUrl?.slice(0,80)}" keys=${Object.keys(a).join(',')}`)
+        if (a.content) console.log(`[ATT${i}] content=${JSON.stringify(a.content).slice(0,200)}`)
+      })
+    }
+
     // ── File attachment ──────────────────────────────────────────────────────
     const attachments = activity.attachments ?? []
     const logFiles = attachments.filter(a =>
