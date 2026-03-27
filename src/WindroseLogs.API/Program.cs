@@ -1,0 +1,85 @@
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Web;
+using WindroseLogs.Infrastructure.Data;
+using WindroseLogs.Infrastructure.Jobs;
+using WindroseLogs.Infrastructure.Parsing;
+var builder = WebApplication.CreateBuilder(args);
+
+// ── Azure AD Auth ──────────────────────────────────────────────────────────────
+builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration, "AzureAd");
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Admin", policy => policy.RequireClaim("role", "Admin"));
+    options.AddPolicy("Reader", policy => policy.RequireAuthenticatedUser());
+});
+
+// ── Database ───────────────────────────────────────────────────────────────────
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// ── Hangfire ───────────────────────────────────────────────────────────────────
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(c =>
+        c.UseNpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection"))));
+builder.Services.AddHangfireServer();
+
+// ── Application Services ───────────────────────────────────────────────────────
+builder.Services.AddScoped<R5LogParser>();
+builder.Services.AddScoped<LogParsingJob>();
+
+// ── Web ────────────────────────────────────────────────────────────────────────
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "Windrose Logs API", Version = "v1" });
+});
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy.WithOrigins(builder.Configuration["Frontend:Url"] ?? "http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
+});
+
+var app = builder.Build();
+
+// ── Migrate on startup ─────────────────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+
+    // Seed system user for bulk imports
+    var systemId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    if (!await db.Users.AnyAsync(u => u.Id == systemId))
+    {
+        db.Users.Add(new WindroseLogs.Core.Models.User
+        {
+            Id = systemId, Email = "system@windrose.internal",
+            DisplayName = "System", Role = "Admin"
+        });
+        await db.SaveChangesAsync();
+    }
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseHangfireDashboard("/hangfire");
+app.MapControllers();
+
+app.Run();

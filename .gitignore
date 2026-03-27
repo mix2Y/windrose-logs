@@ -1,0 +1,47 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Storage — log files (большие, не нужны в репо)
+storage/
+
+# EF Core — миграции оставляем, снапшоты тоже
+# src/*/Data/Migrations/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# Секреты — шаблоны оставляем, реальные нет
+*.env
+!*.env.template
+!*.env.local.template
+
+# appsettings с секретами (Development перекрывает, но на всякий случай)
+# appsettings.Development.json — ОСТАВЛЯЕМ (нет секретов в репо)
+
+# Docker volumes
+postgres_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs (кроме шаблонов)
+*.log
+!**/*.log.template
+
+# Bulk upload script (локальный)
+bulk-upload.ps1
+reset.sql

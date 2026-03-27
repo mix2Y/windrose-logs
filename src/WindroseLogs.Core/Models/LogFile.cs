@@ -1,0 +1,18 @@
+namespace WindroseLogs.Core.Models;
+
+public class LogFile
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string FileName { get; set; } = string.Empty;
+    public string Source { get; set; } = "web_upload"; // 'web_upload' | 'teams_bot'
+    public DateOnly? SessionDate { get; set; }         // Парсится из имени файла
+    public Guid UploadedBy { get; set; }
+    public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
+    public string Status { get; set; } = "pending";    // pending|processing|done|error
+    public string? ErrorMessage { get; set; }
+    public int TotalLines { get; set; }
+    public int EventsFound { get; set; }
+
+    public User? Uploader { get; set; }
+    public ICollection<LogEvent> Events { get; set; } = [];
+}
