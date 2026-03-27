@@ -20,7 +20,10 @@ public class BulkImportController(
 
     [HttpPost("upload")]
     [RequestSizeLimit(500 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> Upload(
+        IFormFile file,
+        [FromHeader(Name = "X-Uploader-Name")] string? uploaderName,
+        CancellationToken ct)
     {
         if (!IsAuthorized()) return Unauthorized("Invalid or missing X-Api-Key header");
         if (file is null || file.Length == 0) return BadRequest("File is required");
@@ -35,16 +38,14 @@ public class BulkImportController(
             foreach (var entry in zip.Entries)
             {
                 if (!entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)) continue;
-                await using var entryStream = entry.Open();
-                var r = await IngestStream(entryStream, entry.Name, ct);
-                results.Add(r);
+                await using var es = entry.Open();
+                results.Add(await IngestStream(es, entry.Name, uploaderName, ct));
             }
         }
         else if (ext == ".log")
         {
             await using var stream = file.OpenReadStream();
-            var r = await IngestStream(stream, file.FileName, ct);
-            results.Add(r);
+            results.Add(await IngestStream(stream, file.FileName, uploaderName, ct));
         }
         else return BadRequest("Only .log and .zip files accepted");
 
@@ -53,7 +54,10 @@ public class BulkImportController(
 
     [HttpPost("upload-many")]
     [RequestSizeLimit(500 * 1024 * 1024)]
-    public async Task<IActionResult> UploadMany(List<IFormFile> files, CancellationToken ct)
+    public async Task<IActionResult> UploadMany(
+        List<IFormFile> files,
+        [FromHeader(Name = "X-Uploader-Name")] string? uploaderName,
+        CancellationToken ct)
     {
         if (!IsAuthorized()) return Unauthorized("Invalid or missing X-Api-Key header");
         if (files is null || files.Count == 0) return BadRequest("No files provided");
@@ -70,21 +74,20 @@ public class BulkImportController(
                 {
                     if (!entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)) continue;
                     await using var es = entry.Open();
-                    results.Add(await IngestStream(es, entry.Name, ct));
+                    results.Add(await IngestStream(es, entry.Name, uploaderName, ct));
                 }
             }
             else if (ext == ".log")
             {
                 await using var stream = file.OpenReadStream();
-                results.Add(await IngestStream(stream, file.FileName, ct));
+                results.Add(await IngestStream(stream, file.FileName, uploaderName, ct));
             }
         }
         return Ok(new { imported = results.Count, files = results });
     }
 
-    private async Task<object> IngestStream(Stream stream, string fileName, CancellationToken ct)
+    private async Task<object> IngestStream(Stream stream, string fileName, string? uploaderName, CancellationToken ct)
     {
-        // Skip duplicate (same name, not errored)
         var existing = await db.LogFiles
             .Where(f => f.FileName == fileName && f.Status != "error")
             .OrderByDescending(f => f.UploadedAt)
@@ -99,6 +102,7 @@ public class BulkImportController(
             Source      = "bulk_import",
             SessionDate = TryParseDate(fileName),
             UploadedBy  = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            UploaderName = uploaderName,
             Status      = "pending",
         };
 

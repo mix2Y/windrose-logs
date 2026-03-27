@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: windrose-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: windrose-api:local
+    pull_policy: never
+    container_name: windrose-api
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - AzureAd__TenantId=${AZURE_TENANT_ID}
+      - AzureAd__ClientId=${AZURE_CLIENT_ID}
+      - AzureAd__Audience=api://${AZURE_CLIENT_ID}
+      - Frontend__Url=${FRONTEND_URL}
+      - BulkImport__ApiKey=${BULK_IMPORT_API_KEY}
+    volumes: ["/opt/windrose-logs/storage:/app/storage"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    restart: unless-stopped
+
+  frontend:
+    image: windrose-frontend:local
+    pull_policy: never
+    container_name: windrose-frontend
+    ports: ["127.0.0.1:3000:80"]
+    networks: [internal]
+    restart: unless-stopped
+
+  bot:
+    image: windrose-bot:local
+    pull_policy: never
+    container_name: windrose-bot
+    ports: ["127.0.0.1:3978:3978"]
+    environment:
+      - MICROSOFT_APP_ID=${BOT_APP_ID}
+      - MICROSOFT_APP_PASSWORD=${BOT_APP_PASSWORD}
+      - WINDROSE_API_URL=http://api:8080
+      - WINDROSE_API_KEY=${BULK_IMPORT_API_KEY}
+      - PORTAL_URL=${FRONTEND_URL}
+      - PORT=3978
+    depends_on:
+      - api
+    networks: [internal]
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+volumes:
+  postgres_data:

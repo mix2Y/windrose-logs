@@ -185,7 +185,9 @@ export function FilesPage() {
           <table className="data-table">
             <thead><tr>
               <th>File Name</th><th>Source</th><th>Session Date</th><th>Status</th>
-              <th style={{ textAlign: 'right' }}>Events</th><th style={{ textAlign: 'right' }}>Uploaded</th>
+              <th style={{ textAlign: 'right' }}>Events</th>
+              <th>Uploader</th>
+              <th style={{ textAlign: 'right' }}>Uploaded</th>
             </tr></thead>
             <tbody>
               {files.length === 0 && !loading && (
@@ -211,6 +213,13 @@ export function FilesPage() {
                   <td style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-2)' }}>{fmtSession(f.sessionDate)}</td>
                   <td><StatusBadge status={f.status} /></td>
                   <td style={{ textAlign: 'right' }}>{f.status === 'done' ? <span className="badge badge-red">{f.eventsFound}</span> : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>}</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.uploaderName
+                      ? <span title={f.uploaderName}>{f.uploaderName}</span>
+                      : f.source === 'teams_bot'
+                        ? <span style={{ color: 'var(--blue)' }}>Teams</span>
+                        : '—'}
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ fontFamily: 'Geist Mono,monospace', fontSize: 11, color: 'var(--text-2)' }}>{fmtUpload(f.uploadedAt)}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>{timeAgo(f.uploadedAt)}</div>

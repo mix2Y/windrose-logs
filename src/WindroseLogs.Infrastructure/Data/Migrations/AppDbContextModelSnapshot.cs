@@ -171,6 +171,9 @@ namespace WindroseLogs.Infrastructure.Data.Migrations
                     b.Property<Guid>("UploadedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("UploaderName")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Status");

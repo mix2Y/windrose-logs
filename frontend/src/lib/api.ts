@@ -62,6 +62,7 @@ export interface LogFileDto {
   status: string
   eventsFound: number
   errorMessage?: string | null
+  uploaderName?: string | null
 }
 
 export interface MemoryLeakSig {

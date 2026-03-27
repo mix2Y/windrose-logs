@@ -33,7 +33,7 @@ public class FilesController(AppDbContext db) : ControllerBase
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(f => new {
                 f.Id, f.FileName, f.Source, f.SessionDate,
-                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound
+                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound, f.UploaderName
             })
             .ToListAsync(ct);
         return Ok(new { items, total, page, pageSize });
@@ -46,7 +46,7 @@ public class FilesController(AppDbContext db) : ControllerBase
             .Where(f => f.Id == id)
             .Select(f => new {
                 f.Id, f.FileName, f.Source, f.SessionDate,
-                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound
+                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound, f.UploaderName
             })
             .FirstOrDefaultAsync(ct);
 

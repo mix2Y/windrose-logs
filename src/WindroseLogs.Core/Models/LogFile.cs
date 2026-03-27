@@ -7,6 +7,7 @@ public class LogFile
     public string Source { get; set; } = "web_upload"; // 'web_upload' | 'teams_bot'
     public DateOnly? SessionDate { get; set; }         // Парсится из имени файла
     public Guid UploadedBy { get; set; }
+    public string? UploaderName { get; set; }          // Display name (Teams user or email)
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
     public string Status { get; set; } = "pending";    // pending|processing|done|error
     public string? ErrorMessage { get; set; }
