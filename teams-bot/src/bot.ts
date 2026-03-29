@@ -7,9 +7,9 @@ import FormData from 'form-data'
 const API_URL    = process.env.WINDROSE_API_URL  || 'http://localhost:5000'
 const API_KEY    = process.env.WINDROSE_API_KEY  || 'windrose-bulk-dev'
 const PORTAL_URL = process.env.PORTAL_URL        || 'https://windroselogs.sundrift.tech'
-const BOT_APP_ID = process.env.BOT_APP_ID        || ''
-const BOT_APP_PASSWORD = process.env.BOT_APP_PASSWORD || ''
-const TENANT_ID  = process.env.BOT_TENANT_ID     || 'd30356c9-cd3f-4e51-8703-e7b784e6a7e2'
+const BOT_APP_ID       = process.env.MICROSOFT_APP_ID       || process.env.BOT_APP_ID       || ''
+const BOT_APP_PASSWORD = process.env.MICROSOFT_APP_PASSWORD || process.env.BOT_APP_PASSWORD || ''
+const TENANT_ID        = process.env.MICROSOFT_APP_TENANT_ID || process.env.BOT_TENANT_ID   || 'd30356c9-cd3f-4e51-8703-e7b784e6a7e2'
 
 // ── Graph API token cache ─────────────────────────────────────────────────────
 let graphToken: string | null = null
