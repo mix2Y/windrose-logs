@@ -155,13 +155,14 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   ]
 
   if (r5 > 0 && topSigs.length > 0) {
-    lines.push(``, `**R5Check ошибки в файле:**`)
+    lines.push(``, `**R5Check ошибки (${r5}):**`)
     topSigs.forEach((s, i) => {
-      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
-      const cond = s.conditionText.length > 60
-        ? s.conditionText.slice(0, 60) + '...'
-        : s.conditionText
-      lines.push(`${i + 1}. \`${cond}\` — **${s.fileCount}x**${unique}`)
+      const unique = s.totalCount === 1 ? ' 🌟' : ''
+      const cond = (s.conditionText ?? '?').slice(0, 80)
+      const msg = s.sampleMessage ? `\n    💬 ${s.sampleMessage.slice(0, 100)}` : ''
+      const where = s.whereText ? `\n    📍 ${s.whereText.slice(0, 80)}` : ''
+      const src = s.sourceFile ? ` · ${s.sourceFile.slice(0, 50)}` : ''
+      lines.push(`${i + 1}. \`${cond}\`${unique} — **${s.fileCount}x**${src}${msg}${where}`)
     })
   } else if (r5 === 0 && ml === 0) {
     lines.push(`✨ Критических ошибок не найдено`)
