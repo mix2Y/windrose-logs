@@ -75,9 +75,11 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
   try {
     const sinceStr = since.toISOString()
     const data = await graphGet(
-      `/chats/${chatId}/messages?$filter=createdDateTime ge ${sinceStr}&$top=50&$orderby=createdDateTime asc`
+      `/chats/${chatId}/messages?$top=50`
     )
     for (const msg of (data.value ?? [])) {
+      // Only process messages newer than since
+      if (new Date(msg.createdDateTime) <= since) continue
       if (!msg.attachments?.length) continue
       for (const att of msg.attachments) {
         const name: string = att.name ?? ''
