@@ -3,6 +3,7 @@ import {
 } from 'botbuilder'
 import fetch from 'node-fetch'
 import FormData from 'form-data'
+import * as https from 'https'
 
 const API_URL    = process.env.WINDROSE_API_URL  || 'http://localhost:5000'
 const API_KEY    = process.env.WINDROSE_API_KEY  || 'windrose-bulk-dev'
@@ -44,17 +45,31 @@ async function getGraphToken(): Promise<string> {
 
 async function graphGet(path: string) {
   const token = await getGraphToken()
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 15000)
-  try {
-    const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      compress: false,
-    } as any)
-    if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}`)
-    return res.json() as Promise<any>
-  } finally { clearTimeout(t) }
+  console.log(`[GRAPH] GET ${path.slice(0, 60)}`)
+  return new Promise<any>((resolve, reject) => {
+    const options = {
+      hostname: 'graph.microsoft.com',
+      path: `/v1.0${path}`,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      timeout: 15000,
+    }
+    const req = https.request(options, res => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Graph GET ${path} → ${res.statusCode}: ${data.slice(0,100)}`))
+        } else {
+          try { resolve(JSON.parse(data)) }
+          catch { reject(new Error(`JSON parse error: ${data.slice(0,100)}`)) }
+        }
+      })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(); reject(new Error(`Graph GET timeout: ${path}`)) })
+    req.end()
+  })
 }
 
 // ── Windrose API helpers ──────────────────────────────────────────────────────
