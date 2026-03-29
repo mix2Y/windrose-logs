@@ -209,6 +209,7 @@ export class WindroseBot extends ActivityHandler {
   }
 
   private async runPoll() {
+    console.log(`[POLL] Running poll, chats: ${watchedChats.size}`)
     for (const [chatId, state] of watchedChats.entries()) {
       const since = state.lastCheck
       state.lastCheck = new Date()
