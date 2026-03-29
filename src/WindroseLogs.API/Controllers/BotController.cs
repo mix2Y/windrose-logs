@@ -90,9 +90,9 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
             .Where(e => e.FileId == id && e.EventType == "R5Check")
             .GroupBy(e => e.SignatureId)
             .Select(g => new { SignatureId = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count).Take(3)
+            .OrderByDescending(x => x.Count).Take(10)
             .Join(db.EventSignatures, x => x.SignatureId, s => s.Id,
-                (x, s) => new { s.ConditionText, s.SourceFile, fileCount = x.Count })
+                (x, s) => new { s.ConditionText, s.SourceFile, fileCount = x.Count, totalCount = s.TotalCount })
             .ToListAsync(ct);
 
         return Ok(new { file, eventCounts, topSignatures });

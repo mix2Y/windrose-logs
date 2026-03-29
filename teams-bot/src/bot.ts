@@ -146,24 +146,25 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   const eventCounts: {eventType: string, count: number}[] = res.eventCounts ?? []
   const topSigs: any[] = res.topSignatures ?? []
 
-  const r5 = eventCounts.find(e => e.eventType === 'R5Check')?.count ?? 0
-  const ml = eventCounts.find(e => e.eventType === 'MemoryLeak')?.count ?? 0
-  const total = file.eventsFound ?? 0
+  const r5 = eventCounts.find((e: any) => e.eventType === 'R5Check')?.count ?? 0
+  const ml = eventCounts.find((e: any) => e.eventType === 'MemoryLeak')?.count ?? 0
 
   const lines: string[] = [
     `✅ **${fileName}** от **${senderName}**`,
-    ``,
-    `📊 **Результаты:**`,
-    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**   📋 Всего: **${total}**`,
+    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**`,
   ]
 
-  if (r5 === 0 && ml === 0) {
-    lines.push(`✨ Критических ошибок не найдено`)
-  } else if (topSigs.length > 0) {
-    lines.push(``, `🔍 **Топ ошибки:**`)
-    topSigs.slice(0, 3).forEach((s, i) => {
-      lines.push(`${i + 1}. \`${s.conditionText}\` (${s.fileCount}x)`)
+  if (r5 > 0 && topSigs.length > 0) {
+    lines.push(``, `**R5Check ошибки в файле:**`)
+    topSigs.forEach((s, i) => {
+      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
+      const cond = s.conditionText.length > 60
+        ? s.conditionText.slice(0, 60) + '...'
+        : s.conditionText
+      lines.push(`${i + 1}. \`${cond}\` — **${s.fileCount}x**${unique}`)
     })
+  } else if (r5 === 0 && ml === 0) {
+    lines.push(`✨ Критических ошибок не найдено`)
   }
 
   lines.push(``, `🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
