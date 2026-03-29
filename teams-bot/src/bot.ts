@@ -296,17 +296,31 @@ export class WindroseBot extends ActivityHandler {
         if (this.adapter) {
           for (const result of results) {
             try {
-              const ref = {
-                serviceUrl: state.serviceUrl,
-                conversation: { id: state.conversationId },
-                bot: { id: '', name: '' },
-                channelId: 'msteams',
+              const isChannel = state.conversationId.includes('thread.tacv2')
+              let ref: any
+              if (isChannel) {
+                // For channel threads: use messageid= format in conversationId
+                ref = {
+                  serviceUrl: state.serviceUrl,
+                  conversation: { id: `${state.conversationId};messageid=${result.replyToId}`, isGroup: true },
+                  bot: { id: '', name: '' },
+                  channelId: 'msteams',
+                }
+              } else {
+                // For group chats: use root conversationId with replyToId
+                ref = {
+                  serviceUrl: state.serviceUrl,
+                  conversation: { id: state.conversationId, isGroup: true },
+                  bot: { id: '', name: '' },
+                  channelId: 'msteams',
+                }
               }
               await (this.adapter as any).continueConversation(ref, async (ctx: TurnContext) => {
                 const activity = MessageFactory.text(result.text)
-                activity.replyToId = result.replyToId  // thread reply
+                if (!isChannel) activity.replyToId = result.replyToId
                 await ctx.sendActivity(activity)
               })
+              console.log(`[POLL] Sent reply (isChannel=${isChannel}) for msg ${result.replyToId}`)
             } catch (e: any) { console.error(`[POLL] Send error: ${e.message}`) }
           }
         }
