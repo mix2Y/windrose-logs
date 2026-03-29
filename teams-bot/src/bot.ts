@@ -89,9 +89,31 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
         console.log(`[POLL] Found file: ${name} in chat ${chatId}`)
         try {
           const token = await getGraphToken()
-          const dlRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } })
-          if (!dlRes.ok) { console.error(`[POLL] Download failed: ${dlRes.status}`); continue }
-          const buf = Buffer.from(await dlRes.arrayBuffer())
+          // Try Graph API download endpoint instead of direct SharePoint URL
+          const msgId = msg.id
+          const attId = att.id
+          let buf: Buffer
+          if (attId) {
+            // Download via Graph API
+            const dlToken = await getGraphToken()
+            const dlRes = await fetch(
+              `https://graph.microsoft.com/v1.0/chats/${chatId}/messages/${msgId}/hostedContents/${attId}/$value`,
+              { headers: { Authorization: `Bearer ${dlToken}` } }
+            )
+            if (!dlRes.ok) {
+              console.error(`[POLL] Graph download failed: ${dlRes.status}, trying direct URL`)
+              // Fallback: try direct URL with token
+              const dlRes2 = await fetch(att.contentUrl, { headers: { Authorization: `Bearer ${token}` } })
+              if (!dlRes2.ok) { console.error(`[POLL] Direct download also failed: ${dlRes2.status}`); continue }
+              buf = Buffer.from(await dlRes2.arrayBuffer())
+            } else {
+              buf = Buffer.from(await dlRes.arrayBuffer())
+            }
+          } else {
+            const dlRes = await fetch(att.contentUrl, { headers: { Authorization: `Bearer ${token}` } })
+            if (!dlRes.ok) { console.error(`[POLL] Download failed: ${dlRes.status}`); continue }
+            buf = Buffer.from(await dlRes.arrayBuffer())
+          }
           const senderName = msg.from?.user?.displayName ?? uploaderName
           const upRes = await uploadLog(buf, name, senderName)
           const files = upRes.files ?? [upRes]
