@@ -118,39 +118,52 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
         if (!downloadUrl) continue
         console.log(`[POLL] Found file: ${name} in chat ${chatId}`)
         try {
-          const token = await getGraphToken()
-          // Files in group chats are stored in SharePoint - use driveItem download
-          // Try to get download URL via Graph driveItem
+          console.log(`[POLL] Processing: ${name} | contentUrl: ${att.contentUrl?.slice(0,80)}`)
           let buf: Buffer | null = null
 
-          // Method 1: direct contentUrl with bearer token
-          if (att.contentUrl) {
-            const dlRes = await fetch(att.contentUrl, {
-              headers: { Authorization: `Bearer ${token}` }
-            })
-            if (dlRes.ok) {
-              buf = Buffer.from(await dlRes.arrayBuffer())
-            } else {
-              console.error(`[POLL] Direct URL failed: ${dlRes.status}`)
-            }
-          }
+          // Parse SharePoint URL to get user and file path
+          // Format: https://tenant-my.sharepoint.com/personal/user/Documents/Microsoft Teams Chat Files/file.log
+          const spUrl = att.contentUrl || ''
+          const spMatch = spUrl.match(/sharepoint\.com\/personal\/([^/]+)\/Documents\/(.+)$/)
+          if (spMatch) {
+            const userFolder = spMatch[1] // e.g. a_dashko_sundrift_tech2
+            const filePath = decodeURIComponent(spMatch[2]) // e.g. Microsoft Teams Chat Files/file.log
+            console.log(`[POLL] SharePoint user: ${userFolder}, path: ${filePath}`)
 
-          // Method 2: find via OneDrive search by filename
-          if (!buf) {
-            try {
-              const searchRes = await graphGet(`/drives?$select=id`)
-              // Try searching across all drives
-              const fname = encodeURIComponent(name)
-              const searchData = await graphGet(`/me/drive/search(q='${fname}')?$select=id,name,@microsoft.graph.downloadUrl`)
-              const item = (searchData.value ?? []).find((i: any) => i.name === name)
-              if (item?.['@microsoft.graph.downloadUrl']) {
-                const dlRes = await fetch(item['@microsoft.graph.downloadUrl'])
-                if (dlRes.ok) buf = Buffer.from(await dlRes.arrayBuffer())
+            // Get download URL via Graph API using OneDrive
+            const driveRes = await graphGet(
+              `/users/${userFolder}/drive/root:/${filePath}?$select=id,name,@microsoft.graph.downloadUrl`
+            )
+            const downloadUrl = driveRes['@microsoft.graph.downloadUrl']
+            if (downloadUrl) {
+              console.log(`[POLL] Got download URL, downloading...`)
+              const dlReq = await new Promise<any>((resolve, reject) => {
+                const u = new URL(downloadUrl)
+                const req = https.request({ hostname: u.hostname, path: u.pathname + u.search,
+                  method: 'GET', timeout: 30000
+                }, res => {
+                  const chunks: Buffer[] = []
+                  res.on('data', (c: Buffer) => chunks.push(c))
+                  res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(chunks) }))
+                })
+                req.on('error', reject)
+                req.on('timeout', () => { req.destroy(); reject(new Error('download timeout')) })
+                req.end()
+              })
+              if (dlReq.status === 200) {
+                buf = dlReq.buf
+                console.log(`[POLL] Downloaded ${name}: ${buf!.length} bytes`)
+              } else {
+                console.error(`[POLL] Download failed: ${dlReq.status}`)
               }
-            } catch (e2: any) { console.error(`[POLL] Search method failed: ${e2.message}`) }
+            } else {
+              console.error(`[POLL] No download URL in driveItem response`)
+            }
+          } else {
+            console.error(`[POLL] Cannot parse SharePoint URL: ${spUrl.slice(0, 80)}`)
           }
 
-          if (!buf) { console.error(`[POLL] All download methods failed for ${name}`); continue }
+          if (!buf) { console.error(`[POLL] Download failed for ${name}`); continue }
           const senderName = msg.from?.user?.displayName ?? uploaderName
           const upRes = await uploadLog(buf, name, senderName)
           const files = upRes.files ?? [upRes]
