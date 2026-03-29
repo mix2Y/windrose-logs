@@ -17,21 +17,29 @@ let graphTokenExpiry = 0
 
 async function getGraphToken(): Promise<string> {
   if (graphToken && Date.now() < graphTokenExpiry - 60000) return graphToken
-  const res = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: BOT_APP_ID,
-      client_secret: BOT_APP_PASSWORD,
-      scope: 'https://graph.microsoft.com/.default',
-      grant_type: 'client_credentials',
-    }).toString(),
-  })
-  if (!res.ok) throw new Error(`Graph token failed: ${res.status}`)
-  const data = await res.json() as any
-  graphToken = data.access_token
-  graphTokenExpiry = Date.now() + data.expires_in * 1000
-  return graphToken!
+  console.log('[GRAPH] Fetching new token...')
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 10000)
+  try {
+    const res = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: BOT_APP_ID,
+        client_secret: BOT_APP_PASSWORD,
+        scope: 'https://graph.microsoft.com/.default',
+        grant_type: 'client_credentials',
+      }).toString(),
+      signal: ctrl.signal,
+      compress: false,
+    } as any)
+    if (!res.ok) throw new Error(`Graph token failed: ${res.status}`)
+    const data = await res.json() as any
+    graphToken = data.access_token
+    graphTokenExpiry = Date.now() + data.expires_in * 1000
+    console.log('[GRAPH] Token acquired, expires in', data.expires_in, 's')
+    return graphToken!
+  } finally { clearTimeout(t) }
 }
 
 async function graphGet(path: string) {
@@ -40,9 +48,10 @@ async function graphGet(path: string) {
   const t = setTimeout(() => ctrl.abort(), 15000)
   try {
     const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-    })
+      compress: false,
+    } as any)
     if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}`)
     return res.json() as Promise<any>
   } finally { clearTimeout(t) }
