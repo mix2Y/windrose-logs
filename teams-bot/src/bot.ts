@@ -47,11 +47,30 @@ async function getGraphToken(): Promise<string> {
 async function graphGet(path: string) {
   const token = await getGraphToken()
   console.log(`[GRAPH] GET ${path.slice(0, 60)}`)
-  const res = await axios.get(`https://graph.microsoft.com/v1.0${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 15000,
+  return new Promise<any>((resolve, reject) => {
+    const req = https.request({
+      hostname: 'graph.microsoft.com',
+      path: `/v1.0${path}`,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      timeout: 15000,
+    }, res => {
+      let body = ''
+      res.on('data', (chunk: string) => body += chunk)
+      res.on('end', () => {
+        console.log(`[GRAPH] Response ${res.statusCode} (${body.length} bytes)`)
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Graph GET ${path} → ${res.statusCode}: ${body.slice(0, 100)}`))
+        } else {
+          try { resolve(JSON.parse(body)) }
+          catch (e) { reject(new Error(`JSON parse error: ${body.slice(0, 100)}`)) }
+        }
+      })
+    })
+    req.on('error', (e: Error) => reject(e))
+    req.on('timeout', () => { req.destroy(); reject(new Error(`Graph GET timeout: ${path}`)) })
+    req.end()  // ← CRITICAL: must call end() to send the request
   })
-  return res.data
 }
 
 // ── Windrose API helpers ──────────────────────────────────────────────────────
