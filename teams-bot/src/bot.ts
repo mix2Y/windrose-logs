@@ -203,6 +203,8 @@ export class WindroseBot extends ActivityHandler {
     if (this.pollingStarted) return
     this.pollingStarted = true
     console.log('[POLL] Starting Graph API polling (every 2 min)')
+    // Run immediately first, then every 2 min
+    this.runPoll()
     setInterval(() => this.runPoll(), 2 * 60 * 1000)
   }
 
