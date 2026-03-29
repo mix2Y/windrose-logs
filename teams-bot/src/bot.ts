@@ -73,7 +73,37 @@ async function graphGet(path: string) {
   })
 }
 
-// ── Windrose API helpers ──────────────────────────────────────────────────────
+async function graphPost(path: string, body: any) {
+  const token = await getGraphToken()
+  const bodyStr = JSON.stringify(body)
+  return new Promise<any>((resolve, reject) => {
+    const req = https.request({
+      hostname: 'graph.microsoft.com',
+      path: `/v1.0${path}`,
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+      },
+      timeout: 15000,
+    }, res => {
+      let data = ''
+      res.on('data', (chunk: string) => data += chunk)
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Graph POST ${path} → ${res.statusCode}: ${data.slice(0, 200)}`))
+        } else {
+          try { resolve(JSON.parse(data)) } catch { resolve({}) }
+        }
+      })
+    })
+    req.on('error', (e: Error) => reject(e))
+    req.on('timeout', () => { req.destroy(); reject(new Error(`Graph POST timeout: ${path}`)) })
+    req.write(bodyStr)
+    req.end()
+  })
+}
 async function apiGet(path: string) {
   const res = await fetch(`${API_URL}${path}`, { headers: { 'X-Api-Key': API_KEY } })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
@@ -169,8 +199,18 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           const upRes = await uploadLog(buf, name, senderName)
           const files = upRes.files ?? [upRes]
           for (const f of files) {
-            if (!f.skipped) results.push(`✅ \`${f.fileName}\` от **${senderName}** — принят`)
-            else console.log(`[POLL] Skipped (duplicate): ${f.fileName}`)
+            if (!f.skipped) {
+              results.push(`✅ \`${f.fileName}\` от **${senderName}** — принят`)
+              // Reply in thread to original message
+              try {
+                await graphPost(`/chats/${chatId}/messages/${msg.id}/replies`, {
+                  body: { contentType: 'text', content: `✅ Файл принят в Windrose Logs, парсинг запущен` }
+                })
+                console.log(`[POLL] Replied to message ${msg.id}`)
+              } catch (e: any) { console.error(`[POLL] Reply failed: ${e.message}`) }
+            } else {
+              console.log(`[POLL] Skipped (duplicate): ${f.fileName}`)
+            }
           }
         } catch (e: any) {
           console.error(`[POLL] Error processing ${name}: ${e.message}`)
