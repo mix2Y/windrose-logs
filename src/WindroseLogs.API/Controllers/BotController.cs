@@ -71,6 +71,33 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         return Ok(result);
     }
 
+    [HttpGet("file/{id:guid}")]
+    public async Task<IActionResult> FileStats(Guid id, CancellationToken ct)
+    {
+        var file = await db.LogFiles
+            .Where(f => f.Id == id)
+            .Select(f => new { f.Id, f.FileName, f.Status, f.EventsFound, f.UploaderName, f.UploadedAt })
+            .FirstOrDefaultAsync(ct);
+        if (file is null) return NotFound();
+
+        var eventCounts = await db.LogEvents
+            .Where(e => e.FileId == id)
+            .GroupBy(e => e.EventType)
+            .Select(g => new { eventType = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+
+        var topSignatures = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "R5Check")
+            .GroupBy(e => e.SignatureId)
+            .Select(g => new { SignatureId = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count).Take(3)
+            .Join(db.EventSignatures, x => x.SignatureId, s => s.Id,
+                (x, s) => new { s.ConditionText, s.SourceFile, fileCount = x.Count })
+            .ToListAsync(ct);
+
+        return Ok(new { file, eventCounts, topSignatures });
+    }
+
     /// <summary>Проверить новые уникальные сигнатуры после указанного времени</summary>
     [HttpGet("r5/new-unique")]
     public async Task<IActionResult> NewUnique([FromQuery] DateTime since, CancellationToken ct)

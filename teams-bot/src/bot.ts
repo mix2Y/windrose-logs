@@ -126,6 +126,50 @@ async function uploadLog(content: Buffer, fileName: string, uploaderName: string
   } finally { clearTimeout(t) }
 }
 
+async function waitForFileStats(fileId: string, maxWaitMs = 60000): Promise<any | null> {
+  const start = Date.now()
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      const res = await apiGet(`/api/bot/file/${fileId}`)
+      if (res.file?.status === 'done' || res.file?.status === 'error') {
+        console.log(`[POLL] File ${fileId} done, events: ${res.file.eventsFound}`)
+        return res
+      }
+    } catch (e: any) { console.error(`[POLL] Stats poll error: ${e.message}`) }
+    await new Promise(r => setTimeout(r, 3000))
+  }
+  return null
+}
+
+function formatFileStats(fileName: string, senderName: string, res: any): string {
+  const file = res.file
+  const eventCounts: {eventType: string, count: number}[] = res.eventCounts ?? []
+  const topSigs: any[] = res.topSignatures ?? []
+
+  const r5 = eventCounts.find(e => e.eventType === 'R5Check')?.count ?? 0
+  const ml = eventCounts.find(e => e.eventType === 'MemoryLeak')?.count ?? 0
+  const total = file.eventsFound ?? 0
+
+  const lines: string[] = [
+    `✅ **${fileName}** от **${senderName}**`,
+    ``,
+    `📊 **Результаты:**`,
+    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**   📋 Всего: **${total}**`,
+  ]
+
+  if (r5 === 0 && ml === 0) {
+    lines.push(`✨ Критических ошибок не найдено`)
+  } else if (topSigs.length > 0) {
+    lines.push(``, `🔍 **Топ ошибки:**`)
+    topSigs.slice(0, 3).forEach((s, i) => {
+      lines.push(`${i + 1}. \`${s.conditionText}\` (${s.fileCount}x)`)
+    })
+  }
+
+  lines.push(``, `🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
+  return lines.join('\n')
+}
+
 // ── Graph polling state ───────────────────────────────────────────────────────
 const watchedChats = new Map<string, {
   lastCheck: Date
@@ -198,10 +242,15 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           const upRes = await uploadLog(buf, name, senderName)
           const files = upRes.files ?? [upRes]
           for (const f of files) {
-            if (!f.skipped) {
-              results.push({ text: `✅ \`${f.fileName}\` от **${senderName}** — принят, парсинг запущен`, replyToId: msg.id })
-            } else {
+            if (f.skipped) {
               console.log(`[POLL] Skipped (duplicate): ${f.fileName}`)
+            } else {
+              // Wait for parsing and get file stats
+              const stats = await waitForFileStats(f.fileId)
+              const statsText = stats
+                ? formatFileStats(f.fileName, senderName, stats)
+                : `✅ \`${f.fileName}\` от **${senderName}** — принят, парсинг запущен`
+              results.push({ text: statsText, replyToId: msg.id })
             }
           }
         } catch (e: any) {
