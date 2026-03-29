@@ -157,48 +157,41 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           console.log(`[POLL] Processing: ${name} | contentUrl: ${att.contentUrl?.slice(0,80)}`)
           let buf: Buffer | null = null
 
-          // Parse SharePoint URL to get user and file path
-          // Format: https://tenant-my.sharepoint.com/personal/user/Documents/Microsoft Teams Chat Files/file.log
+          // Use shares API for ANY SharePoint URL (personal OneDrive or team site)
           const spUrl = att.contentUrl || ''
-          const spMatch = spUrl.match(/sharepoint\.com\/personal\/([^/]+)\/Documents\/(.+)$/)
-          if (spMatch) {
-            const userFolder = spMatch[1] // e.g. a_dashko_sundrift_tech2
-            const filePath = decodeURIComponent(spMatch[2]) // e.g. Microsoft Teams Chat Files/file.log
-            // Convert folder name to UPN: a_dashko_sundrift_tech2 → a.dashko@sundrift.tech2? No.
-            // Use shares API instead - more reliable
-            const encoded = 'u!' + Buffer.from(spUrl).toString('base64')
-              .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-            console.log(`[POLL] Trying shares API for: ${name}`)
-
-            const driveRes = await graphGet(`/shares/${encoded}/driveItem`)
-            const dlUrl = driveRes['@microsoft.graph.downloadUrl']
-            if (dlUrl) {
-              console.log(`[POLL] Got anonymous download URL, downloading...`)
-              const dlReq = await new Promise<any>((resolve, reject) => {
-                const u = new URL(dlUrl)
-                const req = https.request({ hostname: u.hostname, path: u.pathname + u.search,
-                  method: 'GET', timeout: 30000
-                }, res => {
-                  const chunks: Buffer[] = []
-                  res.on('data', (c: Buffer) => chunks.push(c))
-                  res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(chunks) }))
-                })
-                req.on('error', reject)
-                req.on('timeout', () => { req.destroy(); reject(new Error('download timeout')) })
-                req.end()
-              })
-              if (dlReq.status === 200) {
-                buf = dlReq.buf
-                console.log(`[POLL] Downloaded ${name}: ${buf!.length} bytes`)
-              } else {
-                console.error(`[POLL] Download failed: ${dlReq.status}`)
-              }
-            } else {
-              console.error(`[POLL] No @microsoft.graph.downloadUrl in response: ${JSON.stringify(driveRes).slice(0, 100)}`)
-            }
-          } else {
-            console.error(`[POLL] Cannot parse SharePoint URL: ${spUrl.slice(0, 80)}`)
+          if (!spUrl.includes('sharepoint.com')) {
+            console.error(`[POLL] Not a SharePoint URL: ${spUrl.slice(0, 80)}`); continue
           }
+
+          const encoded = 'u!' + Buffer.from(spUrl).toString('base64')
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+          console.log(`[POLL] Trying shares API for: ${name}`)
+
+          const driveRes = await graphGet(`/shares/${encoded}/driveItem`)
+          const dlUrl = driveRes['@microsoft.graph.downloadUrl']
+          if (!dlUrl) {
+            console.error(`[POLL] No downloadUrl in response: ${JSON.stringify(driveRes).slice(0, 100)}`); continue
+          }
+
+          console.log(`[POLL] Downloading: ${name}`)
+          const dlReq = await new Promise<any>((resolve, reject) => {
+            const u = new URL(dlUrl)
+            const req = https.request({ hostname: u.hostname, path: u.pathname + u.search,
+              method: 'GET', timeout: 30000
+            }, res => {
+              const chunks: Buffer[] = []
+              res.on('data', (c: Buffer) => chunks.push(c))
+              res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(chunks) }))
+            })
+            req.on('error', reject)
+            req.on('timeout', () => { req.destroy(); reject(new Error('download timeout')) })
+            req.end()
+          })
+          if (dlReq.status !== 200) {
+            console.error(`[POLL] Download failed: ${dlReq.status}`); continue
+          }
+          buf = dlReq.buf
+          console.log(`[POLL] Downloaded ${name}: ${buf!.length} bytes`)
 
           if (!buf) { console.error(`[POLL] Download failed for ${name}`); continue }
           const senderName = msg.from?.user?.displayName ?? uploaderName
