@@ -170,7 +170,7 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   }
 
   lines.push(``, `🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
-  return lines.join('\n')
+  return lines.join('<br>')
 }
 
 // ── Graph polling state ───────────────────────────────────────────────────────
@@ -381,7 +381,11 @@ export class WindroseBot extends ActivityHandler {
                 }
               }
               await (this.adapter as any).continueConversation(ref, async (ctx: TurnContext) => {
-                const activity = MessageFactory.text(result.text)
+                const activity: any = {
+                  type: 'message',
+                  textFormat: 'html',
+                  text: result.text,
+                }
                 await ctx.sendActivity(activity)
               })
               console.log(`[POLL] Sent (isChannel=${state.isChannel}) for msg ${result.replyToId}`)
