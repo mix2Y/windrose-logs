@@ -266,17 +266,19 @@ export class WindroseBot extends ActivityHandler {
       const added = ctx.activity.membersAdded ?? []
       const botId = ctx.activity.recipient?.id
       if (added.some((m: any) => m.id === botId)) {
-        const chatId = ctx.activity.conversation?.id
-        if (chatId && !watchedChats.has(chatId)) {
-          watchedChats.set(chatId, {
+        const rawId = ctx.activity.conversation?.id ?? ''
+        const baseId = rawId.split(';')[0]
+        const isChannel = baseId.includes('thread.tacv2')
+        if (baseId && !watchedChats.has(baseId)) {
+          watchedChats.set(baseId, {
             lastCheck: new Date(),
             serviceUrl: ctx.activity.serviceUrl,
-            conversationId: chatId,
+            conversationId: baseId,
             tenantId: (ctx.activity.channelData as any)?.tenant?.id ?? TENANT_ID,
             botId: ctx.activity.recipient?.id ?? '',
-            isChannel: chatId.includes('thread.tacv2'),
+            isChannel,
           })
-          console.log(`[WATCH] Now watching chat: ${chatId} (isChannel=${chatId.includes('thread.tacv2')})`)
+          console.log(`[WATCH] Now watching: ${baseId} (isChannel=${isChannel})`)
           this.startPolling()
         }
       }
@@ -353,17 +355,20 @@ export class WindroseBot extends ActivityHandler {
     const text = rawText.toLowerCase()
 
     // Register chat for polling
-    const chatId = activity.conversation?.id
-    if (chatId && !watchedChats.has(chatId)) {
-      watchedChats.set(chatId, {
+    const rawConvId = activity.conversation?.id ?? ''
+    // For channels, strip ;messageid=xxx to get the base channel ID
+    const baseConvId = rawConvId.split(';')[0]
+    if (baseConvId && !watchedChats.has(baseConvId)) {
+      const isChannel = baseConvId.includes('thread.tacv2')
+      watchedChats.set(baseConvId, {
         lastCheck: new Date(),
         serviceUrl: activity.serviceUrl,
-        conversationId: chatId,
+        conversationId: baseConvId,
         tenantId: (activity.channelData as any)?.tenant?.id ?? TENANT_ID,
         botId: activity.recipient?.id ?? '',
-        isChannel: chatId.includes('thread.tacv2'),
+        isChannel,
       })
-      console.log(`[WATCH] Registered via message: ${chatId} (isChannel=${chatId.includes('thread.tacv2')})`)
+      console.log(`[WATCH] Registered: ${baseConvId} (isChannel=${isChannel})`)
       this.startPolling()
     }
 
