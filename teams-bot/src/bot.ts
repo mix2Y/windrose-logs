@@ -157,12 +157,13 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   if (r5 > 0 && topSigs.length > 0) {
     lines.push(``, `**R5Check ошибки (${r5}):**`)
     topSigs.forEach((s, i) => {
-      const unique = s.totalCount === 1 ? ' 🌟' : ''
-      const cond = (s.conditionText ?? '?').slice(0, 80)
-      const msg = s.sampleMessage ? `\n    💬 ${s.sampleMessage.slice(0, 100)}` : ''
-      const where = s.whereText ? `\n    📍 ${s.whereText.slice(0, 80)}` : ''
-      const src = s.sourceFile ? ` · ${s.sourceFile.slice(0, 50)}` : ''
-      lines.push(`${i + 1}. \`${cond}\`${unique} — **${s.fileCount}x**${src}${msg}${where}`)
+      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
+      lines.push(``)
+      lines.push(`**${i + 1}.** ${unique} — встречается **${s.fileCount}x** в файле`)
+      lines.push(`Condition: \`${(s.conditionText ?? '?').slice(0, 100)}\``)
+      if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
+      if (s.whereText)     lines.push(`Where: \`${s.whereText.slice(0, 120)}\``)
+      if (s.sourceFile)    lines.push(`File: ${s.sourceFile.slice(0, 80)}`)
     })
   } else if (r5 === 0 && ml === 0) {
     lines.push(`✨ Критических ошибок не найдено`)
