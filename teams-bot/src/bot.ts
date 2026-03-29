@@ -36,11 +36,16 @@ async function getGraphToken(): Promise<string> {
 
 async function graphGet(path: string) {
   const token = await getGraphToken()
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  })
-  if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}`)
-  return res.json() as Promise<any>
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 15000)
+  try {
+    const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    })
+    if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}`)
+    return res.json() as Promise<any>
+  } finally { clearTimeout(t) }
 }
 
 // ── Windrose API helpers ──────────────────────────────────────────────────────
