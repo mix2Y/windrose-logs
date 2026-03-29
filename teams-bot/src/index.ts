@@ -17,7 +17,7 @@ adapter.onTurnError = async (ctx, err) => {
   try { await ctx.sendActivity('Произошла ошибка. Попробуй ещё раз.') } catch { /**/ }
 }
 
-const bot = new WindroseBot()
+const bot = new WindroseBot(adapter)
 const server = restify.createServer({ name: 'WindroseBot' })
 server.use(restify.plugins.bodyParser())
 

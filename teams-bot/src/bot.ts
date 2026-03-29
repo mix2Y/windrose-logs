@@ -7,7 +7,43 @@ import FormData from 'form-data'
 const API_URL    = process.env.WINDROSE_API_URL  || 'http://localhost:5000'
 const API_KEY    = process.env.WINDROSE_API_KEY  || 'windrose-bulk-dev'
 const PORTAL_URL = process.env.PORTAL_URL        || 'https://windroselogs.sundrift.tech'
+const BOT_APP_ID = process.env.BOT_APP_ID        || ''
+const BOT_APP_PASSWORD = process.env.BOT_APP_PASSWORD || ''
+const TENANT_ID  = process.env.BOT_TENANT_ID     || 'd30356c9-cd3f-4e51-8703-e7b784e6a7e2'
 
+// ── Graph API token cache ─────────────────────────────────────────────────────
+let graphToken: string | null = null
+let graphTokenExpiry = 0
+
+async function getGraphToken(): Promise<string> {
+  if (graphToken && Date.now() < graphTokenExpiry - 60000) return graphToken
+  const res = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: BOT_APP_ID,
+      client_secret: BOT_APP_PASSWORD,
+      scope: 'https://graph.microsoft.com/.default',
+      grant_type: 'client_credentials',
+    }).toString(),
+  })
+  if (!res.ok) throw new Error(`Graph token failed: ${res.status}`)
+  const data = await res.json() as any
+  graphToken = data.access_token
+  graphTokenExpiry = Date.now() + data.expires_in * 1000
+  return graphToken!
+}
+
+async function graphGet(path: string) {
+  const token = await getGraphToken()
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}`)
+  return res.json() as Promise<any>
+}
+
+// ── Windrose API helpers ──────────────────────────────────────────────────────
 async function apiGet(path: string) {
   const res = await fetch(`${API_URL}${path}`, { headers: { 'X-Api-Key': API_KEY } })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
@@ -20,16 +56,59 @@ async function uploadLog(content: Buffer, fileName: string, uploaderName: string
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), 60000)
   try {
-    const res = await fetch(`${API_URL}/api/bulk/upload`, {
+    const upRes = await fetch(`${API_URL}/api/bulk/upload`, {
       method: 'POST',
       headers: { 'X-Api-Key': API_KEY, 'X-Uploader-Name': uploaderName, ...form.getHeaders() },
       body: form, signal: ctrl.signal,
     })
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-    return res.json() as Promise<any>
+    if (!upRes.ok) throw new Error(`Upload failed: ${upRes.status}`)
+    return upRes.json() as Promise<any>
   } finally { clearTimeout(t) }
 }
 
+// ── Graph polling state ───────────────────────────────────────────────────────
+// chatId → last polled timestamp
+const watchedChats = new Map<string, { lastCheck: Date, serviceUrl: string, conversationId: string }>()
+
+async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams (auto)'): Promise<string[]> {
+  const results: string[] = []
+  try {
+    const sinceStr = since.toISOString()
+    const data = await graphGet(
+      `/chats/${chatId}/messages?$filter=createdDateTime ge ${sinceStr}&$top=50&$orderby=createdDateTime asc`
+    )
+    for (const msg of (data.value ?? [])) {
+      if (!msg.attachments?.length) continue
+      for (const att of msg.attachments) {
+        const name: string = att.name ?? ''
+        if (!name.toLowerCase().endsWith('.log') && !name.toLowerCase().endsWith('.zip')) continue
+        const downloadUrl = att.contentUrl
+        if (!downloadUrl) continue
+        console.log(`[POLL] Found file: ${name} in chat ${chatId}`)
+        try {
+          const token = await getGraphToken()
+          const dlRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } })
+          if (!dlRes.ok) { console.error(`[POLL] Download failed: ${dlRes.status}`); continue }
+          const buf = Buffer.from(await dlRes.arrayBuffer())
+          const senderName = msg.from?.user?.displayName ?? uploaderName
+          const upRes = await uploadLog(buf, name, senderName)
+          const files = upRes.files ?? [upRes]
+          for (const f of files) {
+            if (!f.skipped) results.push(`✅ \`${f.fileName}\` от **${senderName}** — принят`)
+            else console.log(`[POLL] Skipped (duplicate): ${f.fileName}`)
+          }
+        } catch (e: any) {
+          console.error(`[POLL] Error processing ${name}: ${e.message}`)
+        }
+      }
+    }
+  } catch (e: any) {
+    console.error(`[POLL] Error polling chat ${chatId}: ${e.message}`)
+  }
+  return results
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
 function fmtSig(s: any, i: number): string {
   const date = new Date(s.lastSeen || s.firstSeen).toLocaleDateString('ru-RU')
   const count = s.totalCount ? ` · ${s.totalCount}x` : ''
@@ -61,10 +140,62 @@ const HELP = `**Windrose Logs Bot**
 
 ❓ \`!help\` — это сообщение`
 
+// ── Bot ───────────────────────────────────────────────────────────────────────
 export class WindroseBot extends ActivityHandler {
-  constructor() {
+  private adapter: any
+
+  constructor(adapter?: any) {
     super()
+    this.adapter = adapter
     this.onMessage(async (ctx, next) => { await this.handleMessage(ctx); await next() })
+    this.onConversationUpdate(async (ctx, next) => {
+      const added = ctx.activity.membersAdded ?? []
+      const botId = ctx.activity.recipient?.id
+      if (added.some((m: any) => m.id === botId)) {
+        const chatId = ctx.activity.conversation?.id
+        if (chatId && !watchedChats.has(chatId)) {
+          watchedChats.set(chatId, {
+            lastCheck: new Date(),
+            serviceUrl: ctx.activity.serviceUrl,
+            conversationId: chatId,
+          })
+          console.log(`[WATCH] Now watching chat: ${chatId}`)
+          this.startPolling()
+        }
+      }
+      await next()
+    })
+  }
+
+  private pollingStarted = false
+  private startPolling() {
+    if (this.pollingStarted) return
+    this.pollingStarted = true
+    console.log('[POLL] Starting Graph API polling (every 2 min)')
+    setInterval(() => this.runPoll(), 2 * 60 * 1000)
+  }
+
+  private async runPoll() {
+    for (const [chatId, state] of watchedChats.entries()) {
+      const since = state.lastCheck
+      state.lastCheck = new Date()
+      const results = await pollChatFiles(chatId, since)
+      if (results.length > 0) {
+        console.log(`[POLL] Found ${results.length} new files in chat ${chatId}`)
+        // Send notification to chat via adapter if available
+        if (this.adapter) {
+          try {
+            const ref = {
+              serviceUrl: state.serviceUrl,
+              conversation: { id: state.conversationId },
+            }
+            await this.adapter.continueConversation(ref, async (ctx: TurnContext) => {
+              await ctx.sendActivity(MessageFactory.text(results.join('\n')))
+            })
+          } catch (e: any) { console.error(`[POLL] Send error: ${e.message}`) }
+        }
+      }
+    }
   }
 
   private async handleMessage(ctx: TurnContext) {
@@ -74,9 +205,17 @@ export class WindroseBot extends ActivityHandler {
       .replace(/<at[^>]*>.*?<\/at>/gi, '').replace(/&nbsp;/gi, ' ').trim()
     const text = rawText.toLowerCase()
 
+    // Register chat for polling
+    const chatId = activity.conversation?.id
+    if (chatId && !watchedChats.has(chatId)) {
+      watchedChats.set(chatId, { lastCheck: new Date(), serviceUrl: activity.serviceUrl, conversationId: chatId })
+      console.log(`[WATCH] Registered chat via message: ${chatId}`)
+      this.startPolling()
+    }
+
     console.log(`[MSG] from="${uploaderName}" text="${text}" attachments=${activity.attachments?.length ?? 0}`)
 
-    // Log ALL attachments for debugging
+    // Log attachments for debugging
     if (activity.attachments?.length) {
       activity.attachments.forEach((a, i) => {
         console.log(`[ATT${i}] name="${a.name}" type="${a.contentType}" url="${(a.contentUrl||'').slice(0,60)}"`)
@@ -84,29 +223,22 @@ export class WindroseBot extends ActivityHandler {
       })
     }
 
-    // ── File attachments — accept both SharePoint and direct file types ──────
+    // ── File attachments (via bot message) ────────────────────────────────────
     const logFiles = (activity.attachments ?? []).filter(a => {
       const name = (a.name ?? '').toLowerCase()
-      const isLog = name.endsWith('.log') || name.endsWith('.zip')
-      const isTeamsFile = a.contentType === 'application/vnd.microsoft.teams.file.download.info'
-      const isGenericFile = a.contentType?.startsWith('application/') || a.contentType === 'text/plain'
-      return isLog && (isTeamsFile || isGenericFile || !!a.contentUrl)
+      return (name.endsWith('.log') || name.endsWith('.zip')) &&
+        (a.contentType === 'application/vnd.microsoft.teams.file.download.info' ||
+         !!a.contentUrl || a.contentType?.startsWith('application/'))
     })
 
     if (logFiles.length > 0) {
       await ctx.sendActivity(MessageFactory.text(`⏳ Загружаю ${logFiles.length} файл(а)...`))
       const uploadedAt = new Date()
       const results: string[] = []
-
       for (const att of logFiles) {
         try {
-          const downloadUrl = (att.content as any)?.downloadUrl
-            ?? (att.content as any)?.downloadUrl
-            ?? att.contentUrl
-            ?? (att.content as any)?.uniqueId
+          const downloadUrl = (att.content as any)?.downloadUrl ?? att.contentUrl
           if (!downloadUrl) { results.push(`❌ \`${att.name}\` — нет URL`); continue }
-
-          console.log(`[DL] ${att.name} from ${downloadUrl.slice(0, 80)}`)
           const dlCtrl = new AbortController()
           const dlTimer = setTimeout(() => dlCtrl.abort(), 30000)
           let dlRes: any
@@ -114,29 +246,22 @@ export class WindroseBot extends ActivityHandler {
           finally { clearTimeout(dlTimer) }
           if (!dlRes.ok) throw new Error(`Download ${dlRes.status}`)
           const buf = Buffer.from(await dlRes.arrayBuffer())
-          console.log(`[DL] ${att.name}: ${buf.length} bytes`)
-
-          console.log(`[UP] Uploading ${att.name}...`)
           const upRes = await uploadLog(buf, att.name!, uploaderName)
-          console.log(`[UP] Done: ${JSON.stringify(upRes).slice(0, 100)}`)
-
           const files = upRes.files ?? [upRes]
           for (const f of files) {
             if (f.skipped) results.push(`⏭ \`${f.fileName}\` — уже в системе`)
             else results.push(`✅ \`${f.fileName}\` — принят, парсинг запущен`)
           }
         } catch (e: any) {
-          console.error(`[ERR] ${att.name}: ${e.message}`)
           results.push(`❌ \`${att.name}\` — ошибка: ${e.message}`)
         }
       }
-
       await ctx.sendActivity(MessageFactory.text(results.join('\n')))
       setTimeout(() => this.pollNewUnique(ctx, uploadedAt), 5000)
       return
     }
 
-    // ── Commands ─────────────────────────────────────────────────────────────
+    // ── Commands ──────────────────────────────────────────────────────────────
     if (text === '!help' || text === 'help') {
       await ctx.sendActivity(MessageFactory.text(HELP)); return
     }
