@@ -128,17 +128,18 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           if (spMatch) {
             const userFolder = spMatch[1] // e.g. a_dashko_sundrift_tech2
             const filePath = decodeURIComponent(spMatch[2]) // e.g. Microsoft Teams Chat Files/file.log
-            console.log(`[POLL] SharePoint user: ${userFolder}, path: ${filePath}`)
+            // Convert folder name to UPN: a_dashko_sundrift_tech2 → a.dashko@sundrift.tech2? No.
+            // Use shares API instead - more reliable
+            const encoded = 'u!' + Buffer.from(spUrl).toString('base64')
+              .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+            console.log(`[POLL] Trying shares API for: ${name}`)
 
-            // Get download URL via Graph API using OneDrive
-            const driveRes = await graphGet(
-              `/users/${userFolder}/drive/root:/${encodeURIComponent(filePath).replace(/%2F/g, '/')}?$select=id,name,@microsoft.graph.downloadUrl`
-            )
-            const downloadUrl = driveRes['@microsoft.graph.downloadUrl']
-            if (downloadUrl) {
-              console.log(`[POLL] Got download URL, downloading...`)
+            const driveRes = await graphGet(`/shares/${encoded}/driveItem?$select=id,name,@microsoft.graph.downloadUrl`)
+            const dlUrl = driveRes['@microsoft.graph.downloadUrl']
+            if (dlUrl) {
+              console.log(`[POLL] Got anonymous download URL, downloading...`)
               const dlReq = await new Promise<any>((resolve, reject) => {
-                const u = new URL(downloadUrl)
+                const u = new URL(dlUrl)
                 const req = https.request({ hostname: u.hostname, path: u.pathname + u.search,
                   method: 'GET', timeout: 30000
                 }, res => {
@@ -157,7 +158,7 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
                 console.error(`[POLL] Download failed: ${dlReq.status}`)
               }
             } else {
-              console.error(`[POLL] No download URL in driveItem response`)
+              console.error(`[POLL] No @microsoft.graph.downloadUrl in response: ${JSON.stringify(driveRes).slice(0, 100)}`)
             }
           } else {
             console.error(`[POLL] Cannot parse SharePoint URL: ${spUrl.slice(0, 80)}`)
