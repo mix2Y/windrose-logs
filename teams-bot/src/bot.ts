@@ -201,10 +201,11 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           for (const f of files) {
             if (!f.skipped) {
               results.push(`✅ \`${f.fileName}\` от **${senderName}** — принят`)
-              // Reply in thread to original message
+              // Reply in thread to original message using replyToId
               try {
-                await graphPost(`/chats/${chatId}/messages/${msg.id}/replies`, {
-                  body: { contentType: 'text', content: `✅ Файл принят в Windrose Logs, парсинг запущен` }
+                await graphPost(`/chats/${chatId}/messages`, {
+                  replyToId: msg.id,
+                  body: { contentType: 'text', content: `✅ ${name} — принят, парсинг запущен` }
                 })
                 console.log(`[POLL] Replied to message ${msg.id}`)
               } catch (e: any) { console.error(`[POLL] Reply failed: ${e.message}`) }
