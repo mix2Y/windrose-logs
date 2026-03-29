@@ -134,7 +134,7 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
               .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
             console.log(`[POLL] Trying shares API for: ${name}`)
 
-            const driveRes = await graphGet(`/shares/${encoded}/driveItem?$select=id,name,@microsoft.graph.downloadUrl`)
+            const driveRes = await graphGet(`/shares/${encoded}/driveItem`)
             const dlUrl = driveRes['@microsoft.graph.downloadUrl']
             if (dlUrl) {
               console.log(`[POLL] Got anonymous download URL, downloading...`)
