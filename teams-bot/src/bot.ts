@@ -132,7 +132,7 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
 
             // Get download URL via Graph API using OneDrive
             const driveRes = await graphGet(
-              `/users/${userFolder}/drive/root:/${filePath}?$select=id,name,@microsoft.graph.downloadUrl`
+              `/users/${userFolder}/drive/root:/${encodeURIComponent(filePath).replace(/%2F/g, '/')}?$select=id,name,@microsoft.graph.downloadUrl`
             )
             const downloadUrl = driveRes['@microsoft.graph.downloadUrl']
             if (downloadUrl) {
