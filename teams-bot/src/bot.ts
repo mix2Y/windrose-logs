@@ -127,8 +127,14 @@ async function uploadLog(content: Buffer, fileName: string, uploaderName: string
 }
 
 // ── Graph polling state ───────────────────────────────────────────────────────
-// chatId → last polled timestamp
-const watchedChats = new Map<string, { lastCheck: Date, serviceUrl: string, conversationId: string }>()
+const watchedChats = new Map<string, {
+  lastCheck: Date
+  serviceUrl: string
+  conversationId: string
+  tenantId: string
+  botId: string
+  isChannel: boolean
+}>()
 
 async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams (auto)'): Promise<{text: string, replyToId: string}[]> {
   const results: {text: string, replyToId: string}[] = []
@@ -266,8 +272,11 @@ export class WindroseBot extends ActivityHandler {
             lastCheck: new Date(),
             serviceUrl: ctx.activity.serviceUrl,
             conversationId: chatId,
+            tenantId: (ctx.activity.channelData as any)?.tenant?.id ?? TENANT_ID,
+            botId: ctx.activity.recipient?.id ?? '',
+            isChannel: chatId.includes('thread.tacv2'),
           })
-          console.log(`[WATCH] Now watching chat: ${chatId}`)
+          console.log(`[WATCH] Now watching chat: ${chatId} (isChannel=${chatId.includes('thread.tacv2')})`)
           this.startPolling()
         }
       }
@@ -296,31 +305,39 @@ export class WindroseBot extends ActivityHandler {
         if (this.adapter) {
           for (const result of results) {
             try {
-              const isChannel = state.conversationId.includes('thread.tacv2')
               let ref: any
-              if (isChannel) {
-                // For channel threads: use messageid= format in conversationId
+              if (state.isChannel) {
+                // КАНАЛ: reply в тред к конкретному сообщению
+                // Формат conversationId: {channelId};messageid={messageId}
                 ref = {
                   serviceUrl: state.serviceUrl,
-                  conversation: { id: `${state.conversationId};messageid=${result.replyToId}`, isGroup: true },
-                  bot: { id: '', name: '' },
+                  conversation: {
+                    id: `${state.conversationId};messageid=${result.replyToId}`,
+                    isGroup: true,
+                    tenantId: state.tenantId,
+                  },
+                  bot: { id: state.botId, name: 'Windrose Logs' },
                   channelId: 'msteams',
                 }
+                console.log(`[POLL] Channel reply ref: ${JSON.stringify(ref).slice(0, 120)}`)
               } else {
-                // For group chats: use root conversationId with replyToId
+                // ГРУППОВОЙ ЧАТ: просто сообщение в чат (треды не поддерживаются)
                 ref = {
                   serviceUrl: state.serviceUrl,
-                  conversation: { id: state.conversationId, isGroup: true },
-                  bot: { id: '', name: '' },
+                  conversation: {
+                    id: state.conversationId,
+                    isGroup: true,
+                    tenantId: state.tenantId,
+                  },
+                  bot: { id: state.botId, name: 'Windrose Logs' },
                   channelId: 'msteams',
                 }
               }
               await (this.adapter as any).continueConversation(ref, async (ctx: TurnContext) => {
                 const activity = MessageFactory.text(result.text)
-                if (!isChannel) activity.replyToId = result.replyToId
                 await ctx.sendActivity(activity)
               })
-              console.log(`[POLL] Sent reply (isChannel=${isChannel}) for msg ${result.replyToId}`)
+              console.log(`[POLL] Sent (isChannel=${state.isChannel}) for msg ${result.replyToId}`)
             } catch (e: any) { console.error(`[POLL] Send error: ${e.message}`) }
           }
         }
@@ -338,8 +355,15 @@ export class WindroseBot extends ActivityHandler {
     // Register chat for polling
     const chatId = activity.conversation?.id
     if (chatId && !watchedChats.has(chatId)) {
-      watchedChats.set(chatId, { lastCheck: new Date(), serviceUrl: activity.serviceUrl, conversationId: chatId })
-      console.log(`[WATCH] Registered chat via message: ${chatId}`)
+      watchedChats.set(chatId, {
+        lastCheck: new Date(),
+        serviceUrl: activity.serviceUrl,
+        conversationId: chatId,
+        tenantId: (activity.channelData as any)?.tenant?.id ?? TENANT_ID,
+        botId: activity.recipient?.id ?? '',
+        isChannel: chatId.includes('thread.tacv2'),
+      })
+      console.log(`[WATCH] Registered via message: ${chatId} (isChannel=${chatId.includes('thread.tacv2')})`)
       this.startPolling()
     }
 
