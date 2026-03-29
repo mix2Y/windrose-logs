@@ -76,11 +76,22 @@ export class WindroseBot extends ActivityHandler {
 
     console.log(`[MSG] from="${uploaderName}" text="${text}" attachments=${activity.attachments?.length ?? 0}`)
 
-    // ── File attachments (Teams sends as SharePoint links) ───────────────────
-    const logFiles = (activity.attachments ?? []).filter(a =>
-      a.contentType === 'application/vnd.microsoft.teams.file.download.info' &&
-      (a.name?.endsWith('.log') || a.name?.endsWith('.zip'))
-    )
+    // Log ALL attachments for debugging
+    if (activity.attachments?.length) {
+      activity.attachments.forEach((a, i) => {
+        console.log(`[ATT${i}] name="${a.name}" type="${a.contentType}" url="${(a.contentUrl||'').slice(0,60)}"`)
+        if (a.content) console.log(`[ATT${i}] content=${JSON.stringify(a.content).slice(0,150)}`)
+      })
+    }
+
+    // ── File attachments — accept both SharePoint and direct file types ──────
+    const logFiles = (activity.attachments ?? []).filter(a => {
+      const name = (a.name ?? '').toLowerCase()
+      const isLog = name.endsWith('.log') || name.endsWith('.zip')
+      const isTeamsFile = a.contentType === 'application/vnd.microsoft.teams.file.download.info'
+      const isGenericFile = a.contentType?.startsWith('application/') || a.contentType === 'text/plain'
+      return isLog && (isTeamsFile || isGenericFile || !!a.contentUrl)
+    })
 
     if (logFiles.length > 0) {
       await ctx.sendActivity(MessageFactory.text(`⏳ Загружаю ${logFiles.length} файл(а)...`))
@@ -89,7 +100,10 @@ export class WindroseBot extends ActivityHandler {
 
       for (const att of logFiles) {
         try {
-          const downloadUrl = (att.content as any)?.downloadUrl ?? att.contentUrl
+          const downloadUrl = (att.content as any)?.downloadUrl
+            ?? (att.content as any)?.downloadUrl
+            ?? att.contentUrl
+            ?? (att.content as any)?.uniqueId
           if (!downloadUrl) { results.push(`❌ \`${att.name}\` — нет URL`); continue }
 
           console.log(`[DL] ${att.name} from ${downloadUrl.slice(0, 80)}`)
