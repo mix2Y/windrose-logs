@@ -130,8 +130,8 @@ async function uploadLog(content: Buffer, fileName: string, uploaderName: string
 // chatId → last polled timestamp
 const watchedChats = new Map<string, { lastCheck: Date, serviceUrl: string, conversationId: string }>()
 
-async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams (auto)'): Promise<string[]> {
-  const results: string[] = []
+async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams (auto)'): Promise<{text: string, replyToId: string}[]> {
+  const results: {text: string, replyToId: string}[] = []
   try {
     const sinceStr = since.toISOString()
     const data = await graphGet(
@@ -200,15 +200,7 @@ async function pollChatFiles(chatId: string, since: Date, uploaderName = 'Teams 
           const files = upRes.files ?? [upRes]
           for (const f of files) {
             if (!f.skipped) {
-              results.push(`✅ \`${f.fileName}\` от **${senderName}** — принят`)
-              // Reply in thread to original message using replyToId
-              try {
-                await graphPost(`/chats/${chatId}/messages`, {
-                  replyToId: msg.id,
-                  body: { contentType: 'text', content: `✅ ${name} — принят, парсинг запущен` }
-                })
-                console.log(`[POLL] Replied to message ${msg.id}`)
-              } catch (e: any) { console.error(`[POLL] Reply failed: ${e.message}`) }
+              results.push({ text: `✅ \`${f.fileName}\` от **${senderName}** — принят, парсинг запущен`, replyToId: msg.id })
             } else {
               console.log(`[POLL] Skipped (duplicate): ${f.fileName}`)
             }
@@ -301,17 +293,22 @@ export class WindroseBot extends ActivityHandler {
       const results = await pollChatFiles(chatId, since)
       if (results.length > 0) {
         console.log(`[POLL] Found ${results.length} new files in chat ${chatId}`)
-        // Send notification to chat via adapter if available
         if (this.adapter) {
-          try {
-            const ref = {
-              serviceUrl: state.serviceUrl,
-              conversation: { id: state.conversationId },
-            }
-            await this.adapter.continueConversation(ref, async (ctx: TurnContext) => {
-              await ctx.sendActivity(MessageFactory.text(results.join('\n')))
-            })
-          } catch (e: any) { console.error(`[POLL] Send error: ${e.message}`) }
+          for (const result of results) {
+            try {
+              const ref = {
+                serviceUrl: state.serviceUrl,
+                conversation: { id: state.conversationId },
+                bot: { id: '', name: '' },
+                channelId: 'msteams',
+              }
+              await (this.adapter as any).continueConversation(ref, async (ctx: TurnContext) => {
+                const activity = MessageFactory.text(result.text)
+                activity.replyToId = result.replyToId  // thread reply
+                await ctx.sendActivity(activity)
+              })
+            } catch (e: any) { console.error(`[POLL] Send error: ${e.message}`) }
+          }
         }
       }
     }
