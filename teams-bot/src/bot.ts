@@ -227,40 +227,39 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
 
   // ── 2. R5Check ────────────────────────────────────────────────────────────
   if (r5 > 0 && topSigs.length > 0) {
-    lines.push(``, `**🔴 R5Check ошибки (${r5}):**`)
+    lines.push(``, `**🔴 R5Check ошибки (${r5}):**`, ``)
     topSigs.forEach((s, i) => {
       const unique = s.totalCount === 1 ? ' 🌟' : ''
       const fn = trimWhere(s.whereText)
-      // Используем [N] вместо N. чтобы Teams не схлопывал строки как список
-      lines.push(``)
-      lines.push(`**[${i + 1}]**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` ×${s.fileCount}`)
+      lines.push(`**${i + 1})** ${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` ×${s.fileCount}`)
       if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
       if (fn)              lines.push(`Where: \`${fn}\``)
       if (s.sourceFile)    lines.push(`File: \`${s.sourceFile}\``)
+      lines.push(``)
     })
   }
 
   // ── 3. R5Ensure ───────────────────────────────────────────────────────────
   if (ensures > 0 && ensureEvents.length > 0) {
-    lines.push(``, `**🔶 R5 Ensures (${ensures}):**`)
+    lines.push(``, `**🔶 R5 Ensures (${ensures}):**`, ``)
     ensureEvents.forEach((e: any, i: number) => {
       const fn = trimWhere(e.function)
-      lines.push(``)
-      lines.push(`**[${i + 1}]** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
+      lines.push(`**${i + 1})** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
       if (e.userMessage) lines.push(`Message: ${e.userMessage.slice(0, 150)}`)
       if (fn)            lines.push(`Function: \`${fn}\``)
+      lines.push(``)
     })
     if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
   }
 
   // ── 4. Errors ─────────────────────────────────────────────────────────────
   if (errors > 0 && errorEvents.length > 0) {
-    lines.push(``, `**⚠️ Errors (${errors}):**`)
-    errorEvents.forEach((e: any, i: number) => {
+    lines.push(``, `**⚠️ Errors (${errors}):**`, ``)
+    errorEvents.forEach((e: any) => {
       const msg = (e.errorMessage ?? '').slice(0, 100)
-      lines.push(`**[${i + 1}]** \`${e.channel ?? '?'}\` — ${msg}`)
+      lines.push(`- \`${e.channel ?? '?'}\` — ${msg}`)
     })
-    if (errors > errorEvents.length) lines.push(`_...и ещё ${errors - errorEvents.length}_`)
+    if (errors > errorEvents.length) lines.push(``, `_...и ещё ${errors - errorEvents.length}_`)
   }
 
   if (r5 === 0 && ml === 0 && fatal === 0 && errors === 0 && ensures === 0) {
