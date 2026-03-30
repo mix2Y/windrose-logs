@@ -205,10 +205,12 @@ public partial class R5LogParser
                         {
                             var channel = lm.Groups[3].Value; // e.g. R5LogHttp
                             var body    = lm.Groups[5].Value.Trim();
-                            // Skip: LogOutputDevice (R5Check callstacks), R5LogCheck (R5Check start marker)
-                            // Skip: LogStreamlineAPI (очень шумный, сотни однотипных ошибок per file)
+                            // Skip: LogOutputDevice (R5Check/crash callstacks), R5LogCheck (R5Check start marker)
+                            // Skip: LogStreamlineAPI (noisy), lines with [Callstack]
                             if (channel != "LogOutputDevice" && channel != "R5LogCheck"
-                                && channel != "LogStreamlineAPI" && body.Length > 10)
+                                && channel != "LogStreamlineAPI"
+                                && !body.Contains("[Callstack]")
+                                && body.Length > 10)
                             {
                                 var ts    = ParseTimestamp(lm.Groups[1].Value);
                                 var frame = int.Parse(lm.Groups[2].Value.Trim());
@@ -347,27 +349,30 @@ public partial class R5LogParser
                     break;
 
                 case ParseState.CrashStackTrace:
-                    // Grab first callstack frame as crash info
-                    if (crashStackFirstFrame == null && line.Contains("[Callstack]"))
+                    // Grab first meaningful callstack frame (prefer .exe! entries, skip DLL/unknown)
+                    if (line.Contains("[Callstack]"))
                     {
-                        var idx = line.IndexOf("exe!");
-                        if (idx > 0) crashStackFirstFrame = line[(idx + 4)..].Split('[')[0].Trim();
-                        else crashStackFirstFrame = line.Trim();
+                        var exeIdx = line.IndexOf("exe!");
+                        if (exeIdx > 0 && crashStackFirstFrame == null)
+                        {
+                            crashStackFirstFrame = line[(exeIdx + 4)..].Split('[')[0].Trim();
+                        }
                     }
-                    // End of crash block
+                    // End of crash block: new log line that isn't LogOutputDevice
                     if (IsNewLogLine(line) && !line.Contains("LogOutputDevice"))
                     {
-                        var ct2 = "CrashStackTrace";
-                        var sigId2 = GuidFromHash(HexHash($"Error|{ct2}|{crashStackFirstFrame ?? ""}"));
-                        results.Add(new LogEvent
+                        if (crashStackFirstFrame != null || crashStackTimestamp != default)
                         {
-                            FileId = fileId, SignatureId = sigId2, EventType = "Error",
-                            Timestamp = crashStackTimestamp, FrameNumber = 0,
-                            CheckCondition = ct2,
-                            CheckMessage = crashStackFirstFrame ?? "Crash Stack Trace",
-                            CheckWhere = null,
-                            CheckSourceFile = crashGuid,
-                        });
+                            var sigId2 = GuidFromHash(HexHash($"Error|CrashStackTrace|{crashStackFirstFrame ?? ""}"));
+                            results.Add(new LogEvent
+                            {
+                                FileId = fileId, SignatureId = sigId2, EventType = "Error",
+                                Timestamp = crashStackTimestamp, FrameNumber = 0,
+                                CheckCondition  = "CrashStackTrace",
+                                CheckMessage    = crashStackFirstFrame ?? "Unknown crash",
+                                CheckSourceFile = crashGuid,
+                            });
+                        }
                         state = ParseState.Normal;
                         var m = LogLineRegex().Match(line);
                         if (m.Success) { blockTimestamp = ParseTimestamp(m.Groups[1].Value); blockFrame = int.Parse(m.Groups[2].Value.Trim()); }
@@ -389,7 +394,7 @@ public partial class R5LogParser
                 ensureFunction, ensureCondition, ensureUserMessage, ensureFile));
 
         // Flush pending CrashStackTrace
-        if (state == ParseState.CrashStackTrace)
+        if (state == ParseState.CrashStackTrace && (crashStackFirstFrame != null || crashStackTimestamp != default))
         {
             var sigId3 = GuidFromHash(HexHash($"Error|CrashStackTrace|{crashStackFirstFrame ?? ""}"));
             results.Add(new LogEvent
@@ -398,7 +403,7 @@ public partial class R5LogParser
                 Timestamp = crashStackTimestamp != default ? crashStackTimestamp : DateTimeOffset.UtcNow,
                 FrameNumber = 0,
                 CheckCondition  = "CrashStackTrace",
-                CheckMessage    = crashStackFirstFrame ?? "Crash Stack Trace",
+                CheckMessage    = crashStackFirstFrame ?? "Unknown crash",
                 CheckSourceFile = crashGuid,
             });
         }
