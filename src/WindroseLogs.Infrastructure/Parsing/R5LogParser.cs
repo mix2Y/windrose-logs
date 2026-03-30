@@ -89,6 +89,9 @@ public partial class R5LogParser
         string? crashStackFirstFrame = null;
         DateTimeOffset crashStackTimestamp = default;
 
+        // Dedup: для Error событий записываем только первое вхождение per signature per file
+        var seenErrorSigs = new HashSet<string>();
+
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
         string? line;
 
@@ -229,18 +232,22 @@ public partial class R5LogParser
                                 }
 
                                 var sigHash = HexHash($"Error|{channel}|{fnName ?? ""}|{TrimMsg(msgText ?? "")}");
-                                results.Add(new LogEvent
+                                // Only record FIRST occurrence per signature per file
+                                if (seenErrorSigs.Add(sigHash))
                                 {
-                                    FileId      = fileId,
-                                    SignatureId = GuidFromHash(sigHash),
-                                    EventType   = "Error",
-                                    Timestamp   = ts,
-                                    FrameNumber = frame,
-                                    CheckCondition  = channel,
-                                    CheckMessage    = msgText,
-                                    CheckWhere      = fnName,
-                                    CheckSourceFile = srcFile,
-                                });
+                                    results.Add(new LogEvent
+                                    {
+                                        FileId      = fileId,
+                                        SignatureId = GuidFromHash(sigHash),
+                                        EventType   = "Error",
+                                        Timestamp   = ts,
+                                        FrameNumber = frame,
+                                        CheckCondition  = channel,
+                                        CheckMessage    = msgText,
+                                        CheckWhere      = fnName,
+                                        CheckSourceFile = srcFile,
+                                    });
+                                }
                                 break;
                             }
                         }
