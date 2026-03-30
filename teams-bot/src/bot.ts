@@ -182,9 +182,9 @@ async function waitForFileStats(fileId: string, maxWaitMs = 60000): Promise<any 
 function formatFileStats(fileName: string, senderName: string, res: any): string {
   const file = res.file
   const eventCounts: {eventType: string, count: number}[] = res.eventCounts ?? []
-  const topSigs: any[]     = res.topSignatures ?? []
-  const crashEvents: any[] = res.crashEvents ?? []
-  const errorEvents: any[] = res.errorEvents ?? []
+  const topSigs: any[]      = res.topSignatures ?? []
+  const crashEvents: any[]  = res.crashEvents ?? []
+  const errorEvents: any[]  = res.errorEvents ?? []
   const ensureEvents: any[] = res.ensureEvents ?? []
 
   const r5     = eventCounts.find((e: any) => e.eventType === 'R5Check')?.count ?? 0
@@ -193,23 +193,56 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   const errors = eventCounts.find((e: any) => e.eventType === 'Error')?.count ?? 0
   const ensures= eventCounts.find((e: any) => e.eventType === 'R5Ensure')?.count ?? 0
 
-  const lines: string[] = [
-    `✅ **${fileName}** от **${senderName}**`,
-    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**   💥 Crash: **${fatal}**   ⚠️ Errors: **${errors}**   🔶 Ensures: **${ensures}**`,
-  ]
+  const lines: string[] = []
 
-  // Crash section
+  // ── Header ────────────────────────────────────────────────────────────────
+  lines.push(`✅ **${fileName}** · ${senderName}`)
+
+  // ── Stats badges ──────────────────────────────────────────────────────────
+  const badges: string[] = []
+  if (fatal  > 0) badges.push(`💥 Crash: **${fatal}**`)
+  badges.push(`🔴 R5Check: **${r5}**`)
+  if (ensures> 0) badges.push(`🔶 Ensures: **${ensures}**`)
+  if (errors > 0) badges.push(`⚠️ Errors: **${errors}**`)
+  if (ml     > 0) badges.push(`💧 Leaks: **${ml}**`)
+  lines.push(badges.join('   '))
+
+  // ── 1. Crash ──────────────────────────────────────────────────────────────
   if (fatal > 0 && crashEvents.length > 0) {
     lines.push(``, `**💥 Crash:**`)
     crashEvents.forEach((c: any) => {
-      lines.push(`Type: \`${c.crashType ?? 'Unknown'}\``)
+      lines.push(`Type: \`${c.crashType ?? 'Unknown'}\`   Exit: \`${c.exitReason ?? '—'}\``)
       if (c.errorMessage) lines.push(`Message: ${c.errorMessage}`)
-      if (c.exitReason)   lines.push(`Exit: \`${c.exitReason}\``)
       if (c.crashGuid)    lines.push(`GUID: \`${c.crashGuid}\``)
     })
   }
 
-  // Errors section
+  // ── 2. R5Check ────────────────────────────────────────────────────────────
+  if (r5 > 0 && topSigs.length > 0) {
+    lines.push(``, `**🔴 R5Check ошибки (${r5}):**`)
+    topSigs.forEach((s, i) => {
+      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
+      lines.push(``)
+      lines.push(`**${i + 1}.**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` × ${s.fileCount}`)
+      if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
+      if (s.whereText)     lines.push(`Where: \`${s.whereText.slice(0, 120)}\``)
+      if (s.sourceFile)    lines.push(`File: \`${s.sourceFile.slice(0, 80)}\``)
+    })
+  }
+
+  // ── 3. R5Ensure ───────────────────────────────────────────────────────────
+  if (ensures > 0 && ensureEvents.length > 0) {
+    lines.push(``, `**🔶 R5 Ensures (${ensures}):**`)
+    ensureEvents.forEach((e: any, i: number) => {
+      lines.push(``)
+      lines.push(`**${i + 1}.** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
+      if (e.userMessage) lines.push(`Message: ${e.userMessage.slice(0, 150)}`)
+      if (e.function)    lines.push(`Function: \`${e.function.slice(0, 100)}\``)
+    })
+    if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
+  }
+
+  // ── 4. Errors ─────────────────────────────────────────────────────────────
   if (errors > 0 && errorEvents.length > 0) {
     lines.push(``, `**⚠️ Errors (${errors}):**`)
     errorEvents.forEach((e: any, i: number) => {
@@ -219,34 +252,8 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
     if (errors > errorEvents.length) lines.push(`_...и ещё ${errors - errorEvents.length}_`)
   }
 
-  // Ensures section
-  if (ensures > 0 && ensureEvents.length > 0) {
-    lines.push(``, `**🔶 R5 Ensures (${ensures}):**`)
-    ensureEvents.forEach((e: any, i: number) => {
-      lines.push(``)
-      lines.push(`**${i + 1}.** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
-      if (e.userMessage) lines.push(`Message: ${e.userMessage.slice(0, 120)}`)
-      if (e.function)    lines.push(`Function: \`${e.function.slice(0, 100)}\``)
-    })
-    if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
-  }
-
-  // R5Check section
-  if (r5 > 0 && topSigs.length > 0) {
-    lines.push(``, `**R5Check ошибки (${r5}):**`)
-    topSigs.forEach((s, i) => {
-      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
-      lines.push(``)
-      lines.push(`**${i + 1}.**${unique} — встречается **${s.fileCount}x** в файле`)
-      lines.push(`Condition: \`${(s.conditionText ?? '?').slice(0, 100)}\``)
-      if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
-      if (s.whereText)     lines.push(`Where: \`${s.whereText.slice(0, 120)}\``)
-      if (s.sourceFile)    lines.push(`File: ${s.sourceFile.slice(0, 80)}`)
-    })
-  }
-
   if (r5 === 0 && ml === 0 && fatal === 0 && errors === 0 && ensures === 0) {
-    lines.push(`✨ Критических ошибок не найдено`)
+    lines.push(``, `✨ Критических ошибок не найдено`)
   }
 
   lines.push(``, `🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
@@ -435,6 +442,10 @@ export class WindroseBot extends ActivityHandler {
     for (const [chatId, state] of watchedChats.entries()) {
       const since = state.lastCheck
       state.lastCheck = new Date()
+      // Persist lastCheck to DB so restart doesn't re-send old messages
+      try {
+        await apiPost(`/api/bot/chats/${encodeURIComponent(chatId)}`, {})
+      } catch { /* ignore */ }
       const results = await pollChatFiles(chatId, since)
       if (results.length > 0) {
         console.log(`[POLL] Found ${results.length} new files in chat ${chatId}`)
