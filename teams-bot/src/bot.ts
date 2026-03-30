@@ -179,6 +179,14 @@ async function waitForFileStats(fileId: string, maxWaitMs = 60000): Promise<any 
   return null
 }
 
+function trimWhere(where: string | null | undefined): string {
+  if (!where) return ''
+  // Обрезаем до имени функции (до '[' с путём к файлу)
+  const bracketIdx = where.indexOf(' [')
+  const fn = bracketIdx > 0 ? where.slice(0, bracketIdx) : where
+  return fn.length > 100 ? fn.slice(0, 100) + '…' : fn
+}
+
 function formatFileStats(fileName: string, senderName: string, res: any): string {
   const file = res.file
   const eventCounts: {eventType: string, count: number}[] = res.eventCounts ?? []
@@ -198,14 +206,14 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   // ── Header ────────────────────────────────────────────────────────────────
   lines.push(`✅ **${fileName}** · ${senderName}`)
 
-  // ── Stats badges ──────────────────────────────────────────────────────────
-  const badges: string[] = []
-  if (fatal  > 0) badges.push(`💥 Crash: **${fatal}**`)
-  badges.push(`🔴 R5Check: **${r5}**`)
-  if (ensures> 0) badges.push(`🔶 Ensures: **${ensures}**`)
-  if (errors > 0) badges.push(`⚠️ Errors: **${errors}**`)
-  if (ml     > 0) badges.push(`💧 Leaks: **${ml}**`)
-  lines.push(badges.join('   '))
+  // ── Stats (порядок: Crash, R5Check, Ensures, Errors, Leaks) ───────────────
+  const parts: string[] = []
+  if (fatal  > 0) parts.push(`💥 Crash: **${fatal}**`)
+  parts.push(`🔴 R5Check: **${r5}**`)
+  if (ensures> 0) parts.push(`🔶 Ensures: **${ensures}**`)
+  if (errors > 0) parts.push(`⚠️ Errors: **${errors}**`)
+  if (ml     > 0) parts.push(`💧 Leaks: **${ml}**`)
+  lines.push(parts.join('   '))
 
   // ── 1. Crash ──────────────────────────────────────────────────────────────
   if (fatal > 0 && crashEvents.length > 0) {
@@ -221,12 +229,14 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   if (r5 > 0 && topSigs.length > 0) {
     lines.push(``, `**🔴 R5Check ошибки (${r5}):**`)
     topSigs.forEach((s, i) => {
-      const unique = s.totalCount === 1 ? ' 🌟 уникальная' : ''
+      const unique = s.totalCount === 1 ? ' 🌟' : ''
+      const fn = trimWhere(s.whereText)
+      // Используем [N] вместо N. чтобы Teams не схлопывал строки как список
       lines.push(``)
-      lines.push(`**${i + 1}.**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` × ${s.fileCount}`)
+      lines.push(`**[${i + 1}]**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` ×${s.fileCount}`)
       if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
-      if (s.whereText)     lines.push(`Where: \`${s.whereText.slice(0, 120)}\``)
-      if (s.sourceFile)    lines.push(`File: \`${s.sourceFile.slice(0, 80)}\``)
+      if (fn)              lines.push(`Where: \`${fn}\``)
+      if (s.sourceFile)    lines.push(`File: \`${s.sourceFile}\``)
     })
   }
 
@@ -234,10 +244,11 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   if (ensures > 0 && ensureEvents.length > 0) {
     lines.push(``, `**🔶 R5 Ensures (${ensures}):**`)
     ensureEvents.forEach((e: any, i: number) => {
+      const fn = trimWhere(e.function)
       lines.push(``)
-      lines.push(`**${i + 1}.** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
+      lines.push(`**[${i + 1}]** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
       if (e.userMessage) lines.push(`Message: ${e.userMessage.slice(0, 150)}`)
-      if (e.function)    lines.push(`Function: \`${e.function.slice(0, 100)}\``)
+      if (fn)            lines.push(`Function: \`${fn}\``)
     })
     if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
   }
@@ -247,7 +258,7 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
     lines.push(``, `**⚠️ Errors (${errors}):**`)
     errorEvents.forEach((e: any, i: number) => {
       const msg = (e.errorMessage ?? '').slice(0, 100)
-      lines.push(`${i + 1}. \`${e.channel ?? '?'}\` — ${msg}`)
+      lines.push(`**[${i + 1}]** \`${e.channel ?? '?'}\` — ${msg}`)
     })
     if (errors > errorEvents.length) lines.push(`_...и ещё ${errors - errorEvents.length}_`)
   }
