@@ -305,6 +305,21 @@ public partial class R5LogParser
             results.Add(BuildEnsureEvent(fileId, ensureTimestamp,
                 ensureFunction, ensureCondition, ensureUserMessage, ensureFile));
 
+        // Flush pending CrashStackTrace
+        if (state == ParseState.CrashStackTrace)
+        {
+            var sigId3 = GuidFromHash(HexHash($"Error|CrashStackTrace|{crashStackFirstFrame ?? ""}"));
+            results.Add(new LogEvent
+            {
+                FileId = fileId, SignatureId = sigId3, EventType = "Error",
+                Timestamp = crashStackTimestamp != default ? crashStackTimestamp : DateTimeOffset.UtcNow,
+                FrameNumber = 0,
+                CheckCondition  = "CrashStackTrace",
+                CheckMessage    = crashStackFirstFrame ?? "Crash Stack Trace",
+                CheckSourceFile = crashGuid,
+            });
+        }
+
         // Add FatalError event if crash was detected
         if (crashDetected && crashGuid != null)
         {
