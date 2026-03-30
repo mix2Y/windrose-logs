@@ -131,6 +131,17 @@ public class LogParsingJob(
             dict[hash].Events.AddRange(g);
         }
 
+        foreach (var g in events
+            .Where(e => e.EventType == "FatalError")
+            .GroupBy(e => new { CrashType = e.CheckCondition ?? "Crash", ExitReason = e.CheckWhere ?? "" }))
+        {
+            var hash = R5LogParser.ComputeSignatureHash(g.Key.CrashType, g.Key.ExitReason);
+            if (!dict.ContainsKey(hash))
+                dict[hash] = new SigGroup("FatalError", g.Key.CrashType,
+                    g.Key.ExitReason, null, []);
+            dict[hash].Events.AddRange(g);
+        }
+
         return dict;
     }
 
