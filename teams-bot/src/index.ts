@@ -34,7 +34,14 @@ server.listen(PORT, async () => {
   console.log(`\n✅ Windrose Bot running on port ${PORT}`)
   console.log(`   API: ${process.env.WINDROSE_API_URL}`)
   console.log(`   Portal: ${process.env.PORTAL_URL}`)
-  // Load persisted chats and start polling
-  await loadWatchedChats()
-  bot.startPollingIfNeeded()
+  // Load persisted chats and start polling (retry until API is ready)
+  const tryLoad = async (attempts = 0) => {
+    try {
+      await loadWatchedChats()
+      bot.startPollingIfNeeded()
+    } catch {
+      if (attempts < 10) setTimeout(() => tryLoad(attempts + 1), 3000)
+    }
+  }
+  setTimeout(() => tryLoad(), 5000)
 })
