@@ -325,8 +325,8 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       const fn = trimWhere(s.whereText)
       lines.push(`**${i + 1})**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` ×${s.fileCount}`)
       if (s.sampleMessage) lines.push(`Message: ${s.sampleMessage.slice(0, 150)}`)
-      if (fn)              lines.push(`Where: \`${fn}\``)
-      if (s.sourceFile)    lines.push(`File: \`${s.sourceFile}\``)
+      if (fn)              lines.push(`Where: ${fn}`)
+      if (s.sourceFile)    lines.push(`File: ${s.sourceFile}`)
     })
   }
 
@@ -337,7 +337,7 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       const fn = trimWhere(e.function)
       lines.push(`**${i + 1})** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
       if (e.userMessage) lines.push(`Message: ${e.userMessage.slice(0, 150)}`)
-      if (fn)            lines.push(`Function: \`${fn}\``)
+      if (fn)            lines.push(`Function: ${fn}`)
     })
     if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
   }
