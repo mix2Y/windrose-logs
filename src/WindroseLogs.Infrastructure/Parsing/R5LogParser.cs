@@ -7,10 +7,12 @@ namespace WindroseLogs.Infrastructure.Parsing;
 
 /// <summary>
 /// Парсер логов Unreal Engine / R5 формата.
-/// Распознаёт три типа событий:
+/// Распознаёт пять типов событий:
 ///   - R5Check   : многострочный блок assertion failure
 ///   - MemoryLeak: однострочное предупреждение R5LogSystemResources
-///   - FatalError: краш / GPU crash / Fatal error
+///   - FatalError: краш / GPU crash / Fatal error (с XML блоком)
+///   - R5Ensure  : блок === Error on === с Type 'R5Ensure'
+///   - Error     : Crash Stack Trace без XML (серверный краш)
 /// </summary>
 public partial class R5LogParser
 {
@@ -36,7 +38,19 @@ public partial class R5LogParser
     [GeneratedRegex(@"FPlatformMisc::RequestExit\(\d+,\s*([^)]+)\)")]
     private static partial Regex ExitReasonRegex();
 
-    private enum ParseState { Normal, R5CheckBlock, Callstack }
+    // R5Ensure block field patterns
+    [GeneratedRegex(@"^Type '([^']+)'")]
+    private static partial Regex EnsureTypeRegex();
+    [GeneratedRegex(@"^Function '([^']+)'")]
+    private static partial Regex EnsureFunctionRegex();
+    [GeneratedRegex(@"^Condition '([^']+)'")]
+    private static partial Regex EnsureConditionRegex();
+    [GeneratedRegex(@"^UserMessage '(.+)'")]
+    private static partial Regex EnsureUserMessageRegex();
+    [GeneratedRegex(@"^File '(.+)'")]
+    private static partial Regex EnsureFileRegex();
+
+    private enum ParseState { Normal, R5CheckBlock, Callstack, R5EnsureBlock, CrashStackTrace }
 
     public List<LogEvent> Parse(Stream stream, Guid fileId)
     {
@@ -58,6 +72,19 @@ public partial class R5LogParser
         string? crashExitReason = null;
         DateTimeOffset crashTimestamp = default;
         bool crashDetected = false;
+
+        // R5Ensure block tracking
+        string? ensureType = null;
+        string? ensureFunction = null;
+        string? ensureCondition = null;
+        string? ensureUserMessage = null;
+        string? ensureFile = null;
+        DateTimeOffset ensureTimestamp = default;
+
+        // CrashStackTrace (server crash without XML)
+        bool inCrashStackTrace = false;
+        string? crashStackFirstFrame = null;
+        DateTimeOffset crashStackTimestamp = default;
 
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
         string? line;
@@ -140,6 +167,25 @@ public partial class R5LogParser
                         break;
                     }
 
+                    // ── R5Ensure block trigger ───────────────────────────────
+                    if (line.Contains("=== Error on"))
+                    {
+                        state = ParseState.R5EnsureBlock;
+                        ensureType = null; ensureFunction = null;
+                        ensureCondition = null; ensureUserMessage = null; ensureFile = null;
+                        ensureTimestamp = blockTimestamp != default ? blockTimestamp : DateTimeOffset.UtcNow;
+                        break;
+                    }
+
+                    // ── Crash Stack Trace (server crash without XML) ─────────
+                    if (line.Contains("=== Crash Stack Trace: ==="))
+                    {
+                        state = ParseState.CrashStackTrace;
+                        crashStackFirstFrame = null;
+                        crashStackTimestamp = blockTimestamp != default ? blockTimestamp : DateTimeOffset.UtcNow;
+                        break;
+                    }
+
                     // Track last timestamp for R5Check block attribution
                     {
                         var m = LogLineRegex().Match(line);
@@ -193,12 +239,72 @@ public partial class R5LogParser
                         }
                     }
                     break;
+
+                case ParseState.R5EnsureBlock:
+                    var et = EnsureTypeRegex().Match(line);
+                    if (et.Success) { ensureType = et.Groups[1].Value; break; }
+                    var ef = EnsureFunctionRegex().Match(line);
+                    if (ef.Success) { ensureFunction = ef.Groups[1].Value; break; }
+                    var ec = EnsureConditionRegex().Match(line);
+                    if (ec.Success) { ensureCondition = ec.Groups[1].Value; break; }
+                    var eu = EnsureUserMessageRegex().Match(line);
+                    if (eu.Success) { ensureUserMessage = eu.Groups[1].Value; break; }
+                    var efi = EnsureFileRegex().Match(line);
+                    if (efi.Success) { ensureFile = efi.Groups[1].Value; break; }
+                    // End of block: empty line or new log line after fields collected
+                    if ((string.IsNullOrWhiteSpace(line) || IsNewLogLine(line)) && ensureType != null)
+                    {
+                        if (ensureType == "R5Ensure")
+                            results.Add(BuildEnsureEvent(fileId, ensureTimestamp,
+                                ensureFunction, ensureCondition, ensureUserMessage, ensureFile));
+                        state = ParseState.Normal;
+                        ensureType = null;
+                        if (IsNewLogLine(line))
+                        {
+                            var m = LogLineRegex().Match(line);
+                            if (m.Success) { blockTimestamp = ParseTimestamp(m.Groups[1].Value); blockFrame = int.Parse(m.Groups[2].Value.Trim()); }
+                        }
+                    }
+                    break;
+
+                case ParseState.CrashStackTrace:
+                    // Grab first callstack frame as crash info
+                    if (crashStackFirstFrame == null && line.Contains("[Callstack]"))
+                    {
+                        var idx = line.IndexOf("exe!");
+                        if (idx > 0) crashStackFirstFrame = line[(idx + 4)..].Split('[')[0].Trim();
+                        else crashStackFirstFrame = line.Trim();
+                    }
+                    // End of crash block
+                    if (IsNewLogLine(line) && !line.Contains("LogOutputDevice"))
+                    {
+                        var ct2 = "CrashStackTrace";
+                        var sigId2 = GuidFromHash(HexHash($"Error|{ct2}|{crashStackFirstFrame ?? ""}"));
+                        results.Add(new LogEvent
+                        {
+                            FileId = fileId, SignatureId = sigId2, EventType = "Error",
+                            Timestamp = crashStackTimestamp, FrameNumber = 0,
+                            CheckCondition = ct2,
+                            CheckMessage = crashStackFirstFrame ?? "Crash Stack Trace",
+                            CheckWhere = null,
+                            CheckSourceFile = crashGuid,
+                        });
+                        state = ParseState.Normal;
+                        var m = LogLineRegex().Match(line);
+                        if (m.Success) { blockTimestamp = ParseTimestamp(m.Groups[1].Value); blockFrame = int.Parse(m.Groups[2].Value.Trim()); }
+                    }
+                    break;
             }
         }
 
         if (state != ParseState.Normal && condition != null)
             results.Add(BuildR5CheckEvent(fileId, blockTimestamp, blockFrame,
                 condition, message, where, sourceFile, callstack));
+
+        // Flush pending R5Ensure
+        if (state == ParseState.R5EnsureBlock && ensureType == "R5Ensure")
+            results.Add(BuildEnsureEvent(fileId, ensureTimestamp,
+                ensureFunction, ensureCondition, ensureUserMessage, ensureFile));
 
         // Add FatalError event if crash was detected
         if (crashDetected && crashGuid != null)
@@ -220,6 +326,25 @@ public partial class R5LogParser
         }
 
         return results;
+    }
+
+    private static LogEvent BuildEnsureEvent(Guid fileId, DateTimeOffset ts,
+        string? function, string? condition, string? userMessage, string? file)
+    {
+        var cond = condition ?? function ?? "R5Ensure";
+        var where = function ?? "";
+        return new LogEvent
+        {
+            FileId = fileId,
+            SignatureId = GuidFromHash(HexHash($"R5Ensure|{cond}|{TrimWhere(where)}")),
+            EventType = "R5Ensure",
+            Timestamp = ts,
+            FrameNumber = 0,
+            CheckCondition = cond,
+            CheckMessage = userMessage,
+            CheckWhere = function,
+            CheckSourceFile = file,
+        };
     }
 
     private static LogEvent BuildR5CheckEvent(Guid fileId, DateTimeOffset ts, int frame,

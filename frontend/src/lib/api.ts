@@ -105,7 +105,52 @@ export interface CrashEvent {
   uploaderName: string | null
 }
 
+export interface EnsureEvent {
+  id: number
+  fileId: string
+  fileName: string
+  condition: string | null
+  userMessage: string | null
+  function: string | null
+  file: string | null
+  timestamp: string
+  uploaderName: string | null
+}
+
+export interface ErrorEvent {
+  id: number
+  fileId: string
+  fileName: string
+  errorType: string | null
+  errorMessage: string | null
+  crashGuid: string | null
+  timestamp: string
+  uploaderName: string | null
+}
+
 export const api = {
+  ensures: {
+    list: (params?: { page?: number; pageSize?: number; search?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.page)     p.set('page',     String(params.page))
+      if (params?.pageSize) p.set('pageSize', String(params.pageSize))
+      if (params?.search)   p.set('search',   params.search)
+      return request<{ items: EnsureEvent[]; total: number }>(`/ensures?${p}`)
+    },
+    stats: () => request<{ total: number; filesAffected: number; unique: number }>('/ensures/stats'),
+  },
+
+  errors: {
+    list: (params?: { page?: number; pageSize?: number; search?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.page)     p.set('page',     String(params.page))
+      if (params?.pageSize) p.set('pageSize', String(params.pageSize))
+      if (params?.search)   p.set('search',   params.search)
+      return request<{ items: ErrorEvent[]; total: number }>(`/errors?${p}`)
+    },
+    stats: () => request<{ total: number; filesAffected: number; byType: { errorType: string; count: number }[] }>('/errors/stats'),
+  },
+
   crashes: {
     list: (params?: { page?: number; pageSize?: number; search?: string }) => {
       const p = new URLSearchParams()

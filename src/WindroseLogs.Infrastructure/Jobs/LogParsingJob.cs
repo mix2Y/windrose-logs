@@ -142,6 +142,27 @@ public class LogParsingJob(
             dict[hash].Events.AddRange(g);
         }
 
+        foreach (var g in events
+            .Where(e => e.EventType == "R5Ensure")
+            .GroupBy(e => new { Cond = e.CheckCondition ?? "", Where = e.CheckWhere ?? "" }))
+        {
+            var hash = R5LogParser.ComputeSignatureHash(g.Key.Cond, g.Key.Where);
+            if (!dict.ContainsKey(hash))
+                dict[hash] = new SigGroup("R5Ensure", g.Key.Cond, g.Key.Where,
+                    g.First().CheckSourceFile, []);
+            dict[hash].Events.AddRange(g);
+        }
+
+        foreach (var g in events
+            .Where(e => e.EventType == "Error")
+            .GroupBy(e => new { Cond = e.CheckCondition ?? "", Msg = e.CheckMessage ?? "" }))
+        {
+            var hash = R5LogParser.ComputeSignatureHash(g.Key.Cond, g.Key.Msg);
+            if (!dict.ContainsKey(hash))
+                dict[hash] = new SigGroup("Error", g.Key.Cond, g.Key.Msg, null, []);
+            dict[hash].Events.AddRange(g);
+        }
+
         return dict;
     }
 
