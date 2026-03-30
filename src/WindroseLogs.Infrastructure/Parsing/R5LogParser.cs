@@ -54,7 +54,7 @@ public partial class R5LogParser
     [GeneratedRegex(@"^\s*\[[\d:+-]+\]\s+(\w[\w:<>~]+(?:::\w[\w:<>~]*)*)\s{2,}(.+?)(?:\s+\[([^\[\]]+\.(?:cpp|h|inl):\d+)\])?$")]
     private static partial Regex R5LogErrorBodyRegex();
 
-    private enum ParseState { Normal, R5CheckBlock, Callstack, R5EnsureBlock, CrashStackTrace }
+    private enum ParseState { Normal, R5CheckBlock, R5NoEntryBlock, Callstack, R5EnsureBlock, CrashStackTrace }
 
     public List<LogEvent> Parse(Stream stream, Guid fileId)
     {
@@ -135,6 +135,15 @@ public partial class R5LogParser
                         break;
                     }
 
+                    // ── R5NoEntry trigger ────────────────────────────────────
+                    if (line.Contains("!!! R5NoEntry happens !!!"))
+                    {
+                        state = ParseState.R5NoEntryBlock;
+                        condition = null; message = null; where = null;
+                        sourceFile = null; callstack = [];
+                        break;
+                    }
+
                     // ── MemoryLeak (single line) ─────────────────────────────
                     if (line.Contains("Memory leak suspected!"))
                     {
@@ -197,7 +206,9 @@ public partial class R5LogParser
                             var channel = lm.Groups[3].Value; // e.g. R5LogHttp
                             var body    = lm.Groups[5].Value.Trim();
                             // Skip: LogOutputDevice (R5Check callstacks), R5LogCheck (R5Check start marker)
-                            if (channel != "LogOutputDevice" && channel != "R5LogCheck" && body.Length > 10)
+                            // Skip: LogStreamlineAPI (очень шумный, сотни однотипных ошибок per file)
+                            if (channel != "LogOutputDevice" && channel != "R5LogCheck"
+                                && channel != "LogStreamlineAPI" && body.Length > 10)
                             {
                                 var ts    = ParseTimestamp(lm.Groups[1].Value);
                                 var frame = int.Parse(lm.Groups[2].Value.Trim());
@@ -266,6 +277,25 @@ public partial class R5LogParser
                     }
                     break;
 
+                case ParseState.R5NoEntryBlock:
+                    if (line.TrimStart().StartsWith("Message:"))
+                        message = ExtractQuotedOrRaw(line, "Message:");
+                    else if (line.TrimStart().StartsWith("Where:"))
+                    {
+                        where = ExtractRaw(line, "Where:");
+                        sourceFile = ExtractSourceFile(where);
+                    }
+                    else if (line.Contains("FR5CheckDetails::PrintCallstackToLog"))
+                        state = ParseState.Callstack;
+                    else if (line.Contains("!!! R5NoEntry happens !!!"))
+                    {
+                        // New block — flush current
+                        if (message != null || where != null)
+                            results.Add(BuildR5NoEntryEvent(fileId, blockTimestamp, blockFrame, message, where, sourceFile));
+                        message = null; where = null; sourceFile = null; callstack = [];
+                    }
+                    break;
+
                 case ParseState.Callstack:
                     if (line.Contains("[Callstack]"))
                         callstack.Add(line.Trim());
@@ -274,6 +304,8 @@ public partial class R5LogParser
                         if (condition != null)
                             results.Add(BuildR5CheckEvent(fileId, blockTimestamp, blockFrame,
                                 condition, message, where, sourceFile, callstack));
+                        else if (message != null || where != null)
+                            results.Add(BuildR5NoEntryEvent(fileId, blockTimestamp, blockFrame, message, where, sourceFile));
                         state = ParseState.Normal;
                         condition = null; message = null; where = null;
                         sourceFile = null; callstack = [];
@@ -348,6 +380,9 @@ public partial class R5LogParser
             results.Add(BuildR5CheckEvent(fileId, blockTimestamp, blockFrame,
                 condition, message, where, sourceFile, callstack));
 
+        if (state == ParseState.R5NoEntryBlock && (message != null || where != null))
+            results.Add(BuildR5NoEntryEvent(fileId, blockTimestamp, blockFrame, message, where, sourceFile));
+
         // Flush pending R5Ensure
         if (state == ParseState.R5EnsureBlock && ensureType == "R5Ensure")
             results.Add(BuildEnsureEvent(fileId, ensureTimestamp,
@@ -397,6 +432,37 @@ public partial class R5LogParser
         // Strip trailing UUIDs/numbers for better dedup
         return System.Text.RegularExpressions.Regex.Replace(trimmed, @"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "").Trim();
     }
+
+    private static LogEvent BuildR5NoEntryEvent(Guid fileId, DateTimeOffset ts, int frame,
+        string? message, string? where, string? sourceFile)
+        => new()
+        {
+            FileId = fileId,
+            SignatureId = GuidFromHash(HexHash($"R5NoEntry|{TrimWhere(where ?? "")}|{message ?? ""}")),
+            EventType   = "R5NoEntry",
+            Timestamp   = ts,
+            FrameNumber = frame,
+            CheckCondition  = null,
+            CheckMessage    = message,
+            CheckWhere      = where,
+            CheckSourceFile = sourceFile,
+        };
+
+    private static LogEvent BuildR5NoEntryEvent(Guid fileId, DateTimeOffset ts, int frame,
+        string? message, string? where, string? sourceFile, List<string> callstack)
+        => new()
+        {
+            FileId = fileId,
+            SignatureId = GuidFromHash(HexHash($"R5NoEntry|{TrimWhere(where ?? "")}|{message ?? ""}")),
+            EventType   = "R5NoEntry",
+            Timestamp   = ts,
+            FrameNumber = frame,
+            CheckCondition  = null,
+            CheckMessage    = message,
+            CheckWhere      = where,
+            CheckSourceFile = sourceFile,
+            Callstack       = [.. callstack],
+        };
 
     private static LogEvent BuildEnsureEvent(Guid fileId, DateTimeOffset ts,
         string? function, string? condition, string? userMessage, string? file)
