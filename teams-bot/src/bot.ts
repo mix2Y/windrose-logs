@@ -145,15 +145,29 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   const file = res.file
   const eventCounts: {eventType: string, count: number}[] = res.eventCounts ?? []
   const topSigs: any[] = res.topSignatures ?? []
+  const crashEvents: any[] = res.crashEvents ?? []
 
-  const r5 = eventCounts.find((e: any) => e.eventType === 'R5Check')?.count ?? 0
-  const ml = eventCounts.find((e: any) => e.eventType === 'MemoryLeak')?.count ?? 0
+  const r5    = eventCounts.find((e: any) => e.eventType === 'R5Check')?.count ?? 0
+  const ml    = eventCounts.find((e: any) => e.eventType === 'MemoryLeak')?.count ?? 0
+  const fatal = eventCounts.find((e: any) => e.eventType === 'FatalError')?.count ?? 0
 
   const lines: string[] = [
     `✅ **${fileName}** от **${senderName}**`,
-    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**`,
+    `🔴 R5Check: **${r5}**   💧 Memory Leak: **${ml}**   💥 Crash: **${fatal}**`,
   ]
 
+  // Crash section
+  if (fatal > 0 && crashEvents.length > 0) {
+    lines.push(``, `**💥 Crash:**`)
+    crashEvents.forEach((c: any) => {
+      lines.push(`Type: \`${c.crashType ?? 'Unknown'}\``)
+      if (c.errorMessage) lines.push(`Message: ${c.errorMessage}`)
+      if (c.exitReason)   lines.push(`Exit: \`${c.exitReason}\``)
+      if (c.crashGuid)    lines.push(`GUID: \`${c.crashGuid}\``)
+    })
+  }
+
+  // R5Check section
   if (r5 > 0 && topSigs.length > 0) {
     lines.push(``, `**R5Check ошибки (${r5}):**`)
     topSigs.forEach((s, i) => {
@@ -165,7 +179,9 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       if (s.whereText)     lines.push(`Where: \`${s.whereText.slice(0, 120)}\``)
       if (s.sourceFile)    lines.push(`File: ${s.sourceFile.slice(0, 80)}`)
     })
-  } else if (r5 === 0 && ml === 0) {
+  }
+
+  if (r5 === 0 && ml === 0 && fatal === 0) {
     lines.push(`✨ Критических ошибок не найдено`)
   }
 

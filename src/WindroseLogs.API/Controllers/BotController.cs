@@ -101,7 +101,17 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
                 })
             .ToListAsync(ct);
 
-        return Ok(new { file, eventCounts, topSignatures });
+        var crashEvents = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "FatalError")
+            .Select(e => new {
+                crashType    = e.CheckCondition,
+                errorMessage = e.CheckMessage,
+                exitReason   = e.CheckWhere,
+                crashGuid    = e.CheckSourceFile,
+            })
+            .ToListAsync(ct);
+
+        return Ok(new { file, eventCounts, topSignatures, crashEvents });
     }
 
     /// <summary>Проверить новые уникальные сигнатуры после указанного времени</summary>
