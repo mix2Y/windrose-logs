@@ -110,6 +110,44 @@ async function apiGet(path: string) {
   return res.json() as Promise<any>
 }
 
+async function apiPost(path: string, body: any) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`API POST ${path} → ${res.status}`)
+}
+
+export async function loadWatchedChats() {
+  try {
+    const chats = await apiGet('/api/bot/chats')
+    for (const c of chats) {
+      watchedChats.set(c.chatId, {
+        lastCheck: new Date(c.lastCheck),
+        serviceUrl: c.serviceUrl,
+        conversationId: c.chatId,
+        tenantId: c.tenantId,
+        botId: c.botId,
+        isChannel: c.isChannel,
+      })
+    }
+    console.log(`[DB] Loaded ${chats.length} watched chats from DB`)
+  } catch (e: any) { console.error(`[DB] Failed to load chats: ${e.message}`) }
+}
+
+async function saveWatchedChat(chatId: string, state: any) {
+  try {
+    await apiPost('/api/bot/chats', {
+      chatId,
+      serviceUrl: state.serviceUrl,
+      tenantId: state.tenantId,
+      botId: state.botId,
+      isChannel: state.isChannel,
+    })
+  } catch (e: any) { console.error(`[DB] Failed to save chat: ${e.message}`) }
+}
+
 async function uploadLog(content: Buffer, fileName: string, uploaderName: string) {
   const form = new FormData()
   form.append('file', content, { filename: fileName, contentType: 'application/octet-stream' })
@@ -297,6 +335,7 @@ function fmtStats(s: any): string {
     `🗂 Файлов: **${s.doneFiles}** (из ${s.totalFiles})`,
     `🔴 R5Check событий: **${s.r5Total}**`,
     `💧 Memory Leak событий: **${s.mlTotal}**`,
+    `💥 Crash событий: **${s.fatalTotal ?? 0}**`,
     `🔷 Уникальных сигнатур: **${s.signatures}**`,
     `⭐ Встречается только 1 раз: **${s.unique}**`, ``,
     `🔗 [Открыть портал](${PORTAL_URL})`,
@@ -331,14 +370,17 @@ export class WindroseBot extends ActivityHandler {
         const baseId = rawId.split(';')[0]
         const isChannel = baseId.includes('thread.tacv2')
         if (baseId && !watchedChats.has(baseId)) {
-          watchedChats.set(baseId, {
+          const isChannel = baseId.includes('thread.tacv2')
+          const state = {
             lastCheck: new Date(),
             serviceUrl: ctx.activity.serviceUrl,
             conversationId: baseId,
             tenantId: (ctx.activity.channelData as any)?.tenant?.id ?? TENANT_ID,
             botId: ctx.activity.recipient?.id ?? '',
             isChannel,
-          })
+          }
+          watchedChats.set(baseId, state)
+          saveWatchedChat(baseId, state)
           console.log(`[WATCH] Now watching: ${baseId} (isChannel=${isChannel})`)
           this.startPolling()
         }
@@ -348,6 +390,11 @@ export class WindroseBot extends ActivityHandler {
   }
 
   private pollingStarted = false
+
+  public startPollingIfNeeded() {
+    if (watchedChats.size > 0) this.startPolling()
+  }
+
   private startPolling() {
     if (this.pollingStarted) return
     this.pollingStarted = true
@@ -417,18 +464,19 @@ export class WindroseBot extends ActivityHandler {
 
     // Register chat for polling
     const rawConvId = activity.conversation?.id ?? ''
-    // For channels, strip ;messageid=xxx to get the base channel ID
     const baseConvId = rawConvId.split(';')[0]
     if (baseConvId && !watchedChats.has(baseConvId)) {
       const isChannel = baseConvId.includes('thread.tacv2')
-      watchedChats.set(baseConvId, {
+      const state = {
         lastCheck: new Date(),
         serviceUrl: activity.serviceUrl,
         conversationId: baseConvId,
         tenantId: (activity.channelData as any)?.tenant?.id ?? TENANT_ID,
         botId: activity.recipient?.id ?? '',
         isChannel,
-      })
+      }
+      watchedChats.set(baseConvId, state)
+      saveWatchedChat(baseConvId, state)
       console.log(`[WATCH] Registered: ${baseConvId} (isChannel=${isChannel})`)
       this.startPolling()
     }

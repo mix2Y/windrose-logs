@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LogEvent> LogEvents => Set<LogEvent>();
     public DbSet<EventSignature> EventSignatures => Set<EventSignature>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<BotWatchedChat> BotWatchedChats => Set<BotWatchedChat>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +60,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.DisplayName).HasMaxLength(200);
             e.Property(x => x.Role).HasMaxLength(20);
             e.HasIndex(x => x.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<BotWatchedChat>(e =>
+        {
+            e.HasKey(x => x.ChatId);
+            e.Property(x => x.ChatId).HasMaxLength(200);
+            e.Property(x => x.ServiceUrl).HasMaxLength(200);
+            e.Property(x => x.TenantId).HasMaxLength(100);
+            e.Property(x => x.BotId).HasMaxLength(100);
         });
     }
 }

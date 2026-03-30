@@ -15,6 +15,51 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         config["BulkImport:ApiKey"] is { } key && key == Request.Headers["X-Api-Key"].FirstOrDefault();
 
     /// <summary>Краткая статистика для ответа бота</summary>
+    /// <summary>Получить все зарегистрированные чаты для polling</summary>
+    [HttpGet("chats")]
+    public async Task<IActionResult> GetChats(CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+        var chats = await db.BotWatchedChats.ToListAsync(ct);
+        return Ok(chats);
+    }
+
+    /// <summary>Зарегистрировать чат для polling</summary>
+    [HttpPost("chats")]
+    public async Task<IActionResult> UpsertChat([FromBody] UpsertChatRequest req, CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+        var existing = await db.BotWatchedChats.FindAsync([req.ChatId], ct);
+        if (existing is null)
+        {
+            db.BotWatchedChats.Add(new WindroseLogs.Core.Models.BotWatchedChat
+            {
+                ChatId = req.ChatId, ServiceUrl = req.ServiceUrl,
+                TenantId = req.TenantId, BotId = req.BotId, IsChannel = req.IsChannel,
+            });
+        }
+        else
+        {
+            existing.ServiceUrl = req.ServiceUrl;
+            existing.TenantId   = req.TenantId;
+            existing.BotId      = req.BotId;
+        }
+        await db.SaveChangesAsync(ct);
+        return Ok();
+    }
+
+    /// <summary>Обновить время последнего polling для чата</summary>
+    [HttpPatch("chats/{chatId}")]
+    public async Task<IActionResult> UpdateLastCheck(string chatId, CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+        var chat = await db.BotWatchedChats.FindAsync([chatId], ct);
+        if (chat is null) return NotFound();
+        chat.LastCheck = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Ok();
+    }
+
     [HttpGet("stats")]
     public async Task<IActionResult> Stats(CancellationToken ct)
     {
@@ -127,3 +172,6 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         return Ok(result);
     }
 }
+
+
+public record UpsertChatRequest(string ChatId, string ServiceUrl, string TenantId, string BotId, bool IsChannel);

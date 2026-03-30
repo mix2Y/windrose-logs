@@ -1,7 +1,7 @@
 import * as restify from 'restify'
 import { BotFrameworkAdapter } from 'botbuilder'
 import * as dotenv from 'dotenv'
-import { WindroseBot } from './bot'
+import { WindroseBot, loadWatchedChats } from './bot'
 
 dotenv.config()
 
@@ -30,8 +30,11 @@ server.post('/api/messages', async (req, res) => {
 })
 
 const PORT = process.env.PORT || 3978
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`\n✅ Windrose Bot running on port ${PORT}`)
   console.log(`   API: ${process.env.WINDROSE_API_URL}`)
   console.log(`   Portal: ${process.env.PORTAL_URL}`)
+  // Load persisted chats and start polling
+  await loadWatchedChats()
+  bot.startPollingIfNeeded()
 })
