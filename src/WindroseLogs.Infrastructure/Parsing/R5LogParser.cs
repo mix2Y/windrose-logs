@@ -82,7 +82,6 @@ public partial class R5LogParser
         DateTimeOffset ensureTimestamp = default;
 
         // CrashStackTrace (server crash without XML)
-        bool inCrashStackTrace = false;
         string? crashStackFirstFrame = null;
         DateTimeOffset crashStackTimestamp = default;
 
