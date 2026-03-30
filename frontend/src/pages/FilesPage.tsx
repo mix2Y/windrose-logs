@@ -204,7 +204,7 @@ export function FilesPage() {
           <table className="data-table">
             <thead><tr>
               <th>File Name</th><th>Source</th><th>Session Date</th><th>Status</th>
-              <th style={{ textAlign: 'right' }}>Events</th>
+              <th style={{ textAlign: 'right' }}>Events Total</th>
               <th>Uploader</th>
               <th style={{ textAlign: 'right' }}>Uploaded</th>
             </tr></thead>

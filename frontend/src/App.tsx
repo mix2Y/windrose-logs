@@ -12,6 +12,7 @@ import { LogViewerPage } from './pages/LogViewerPage'
 import { MemoryLeaksPage } from './pages/MemoryLeaksPage'
 import { MemoryLeakDetailPage } from './pages/MemoryLeakDetailPage'
 import { AdminPage } from './pages/AdminPage'
+import { CrashesPage } from './pages/CrashesPage'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/r5checks"      element={<R5ChecksPage />} />
             <Route path="/r5checks/:id"  element={<R5CheckDetailPage />} />
             <Route path="/memory-leaks"      element={<MemoryLeaksPage />} />
+            <Route path="/crashes"           element={<CrashesPage />} />
             <Route path="/memory-leaks/:id"  element={<MemoryLeakDetailPage />} />
             <Route path="/files"         element={<FilesPage />} />
             <Route path="/files/:id"     element={<FileDetailPage />} />

@@ -93,7 +93,30 @@ export interface AdminStats {
   byEventType: { eventType: string; count: number }[]
 }
 
+export interface CrashEvent {
+  id: number
+  fileId: string
+  fileName: string
+  crashType: string | null
+  errorMessage: string | null
+  exitReason: string | null
+  crashGuid: string | null
+  timestamp: string
+  uploaderName: string | null
+}
+
 export const api = {
+  crashes: {
+    list: (params?: { page?: number; pageSize?: number; search?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.page)     p.set('page',     String(params.page))
+      if (params?.pageSize) p.set('pageSize', String(params.pageSize))
+      if (params?.search)   p.set('search',   params.search)
+      return request<{ items: CrashEvent[]; total: number }>(`/crashes?${p}`)
+    },
+    stats: () => request<{ total: number; filesAffected: number; byType: { crashType: string; count: number }[] }>('/crashes/stats'),
+  },
+
   r5checks: {
     summary: (params?: { dateFrom?: string; dateTo?: string; fileId?: string }) => {
       const p = new URLSearchParams()

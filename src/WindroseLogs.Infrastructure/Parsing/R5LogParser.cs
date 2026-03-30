@@ -7,9 +7,10 @@ namespace WindroseLogs.Infrastructure.Parsing;
 
 /// <summary>
 /// Парсер логов Unreal Engine / R5 формата.
-/// Распознаёт два типа событий:
-///   - R5Check  : многострочный блок assertion failure
+/// Распознаёт три типа событий:
+///   - R5Check   : многострочный блок assertion failure
 ///   - MemoryLeak: однострочное предупреждение R5LogSystemResources
+///   - FatalError: краш / GPU crash / Fatal error
 /// </summary>
 public partial class R5LogParser
 {
@@ -22,6 +23,18 @@ public partial class R5LogParser
     // Memory leak suspected! Avg growth rate 36.85 > 5.00 Mb/s over last +00:01:10.258 (09:00:46->09:01:56). World Клиент -1 (...)
     [GeneratedRegex(@"Memory leak suspected! Avg growth rate ([\d.]+) > ([\d.]+) Mb/s over last [^ ]+ \([^)]+\)\. World (.+)$")]
     private static partial Regex MemoryLeakRegex();
+
+    [GeneratedRegex(@"Session CrashGUID\s*>\s*(UECC-[A-Za-z0-9_-]+)")]
+    private static partial Regex CrashGuidRegex();
+
+    [GeneratedRegex(@"<CrashType>([^<]+)</CrashType>")]
+    private static partial Regex CrashTypeRegex();
+
+    [GeneratedRegex(@"<ErrorMessage>([^<]*)</ErrorMessage>")]
+    private static partial Regex CrashErrorMessageRegex();
+
+    [GeneratedRegex(@"FPlatformMisc::RequestExit\(\d+,\s*([^)]+)\)")]
+    private static partial Regex ExitReasonRegex();
 
     private enum ParseState { Normal, R5CheckBlock, Callstack }
 
@@ -38,12 +51,47 @@ public partial class R5LogParser
         string? sourceFile = null;
         var callstack = new List<string>();
 
+        // FatalError tracking
+        string? crashGuid = null;
+        string? crashType = null;
+        string? crashErrorMessage = null;
+        string? crashExitReason = null;
+        DateTimeOffset crashTimestamp = default;
+        bool crashDetected = false;
+
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
         string? line;
 
         while ((line = reader.ReadLine()) != null)
         {
             line = line.TrimEnd('\r');
+
+            // ── FatalError detection (runs in all states) ─────────────────
+            if (!crashDetected)
+            {
+                var cgm = CrashGuidRegex().Match(line);
+                if (cgm.Success) crashGuid = cgm.Groups[1].Value;
+
+                var ctm = CrashTypeRegex().Match(line);
+                if (ctm.Success) crashType = ctm.Groups[1].Value;
+
+                var cem = CrashErrorMessageRegex().Match(line);
+                if (cem.Success && !string.IsNullOrEmpty(cem.Groups[1].Value))
+                    crashErrorMessage = cem.Groups[1].Value;
+            }
+
+            // Detect final fatal exit line
+            if (!crashDetected && line.Contains("FPlatformMisc::RequestExit"))
+            {
+                var exm = ExitReasonRegex().Match(line);
+                if (exm.Success)
+                {
+                    crashExitReason = exm.Groups[1].Value.Trim();
+                    var lm = LogLineRegex().Match(line);
+                    if (lm.Success) crashTimestamp = ParseTimestamp(lm.Groups[1].Value);
+                    crashDetected = true;
+                }
+            }
 
             switch (state)
             {
@@ -151,6 +199,25 @@ public partial class R5LogParser
         if (state != ParseState.Normal && condition != null)
             results.Add(BuildR5CheckEvent(fileId, blockTimestamp, blockFrame,
                 condition, message, where, sourceFile, callstack));
+
+        // Add FatalError event if crash was detected
+        if (crashDetected && crashGuid != null)
+        {
+            var ct = crashType ?? "Crash";
+            var sigId = GuidFromHash(HexHash($"FatalError|{ct}|{crashExitReason ?? ""}"));
+            results.Add(new LogEvent
+            {
+                FileId      = fileId,
+                SignatureId = sigId,
+                EventType   = "FatalError",
+                Timestamp   = crashTimestamp != default ? crashTimestamp : DateTimeOffset.UtcNow,
+                FrameNumber = 0,
+                CheckCondition  = ct,
+                CheckMessage    = crashErrorMessage ?? "Fatal error",
+                CheckWhere      = crashExitReason,
+                CheckSourceFile = crashGuid,
+            });
+        }
 
         return results;
     }

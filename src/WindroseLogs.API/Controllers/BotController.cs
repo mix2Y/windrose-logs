@@ -25,10 +25,11 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         var totalEvents  = await db.LogEvents.CountAsync(ct);
         var r5Total      = await db.LogEvents.CountAsync(e => e.EventType == "R5Check", ct);
         var mlTotal      = await db.LogEvents.CountAsync(e => e.EventType == "MemoryLeak", ct);
+        var fatalTotal   = await db.LogEvents.CountAsync(e => e.EventType == "FatalError", ct);
         var signatures   = await db.EventSignatures.CountAsync(e => e.EventType == "R5Check", ct);
         var unique       = await db.EventSignatures.CountAsync(e => e.EventType == "R5Check" && e.TotalCount == 1, ct);
 
-        return Ok(new { totalFiles, doneFiles, totalEvents, r5Total, mlTotal, signatures, unique });
+        return Ok(new { totalFiles, doneFiles, totalEvents, r5Total, mlTotal, fatalTotal, signatures, unique });
     }
 
     /// <summary>Все R5Check сигнатуры — для команды !r5 all</summary>

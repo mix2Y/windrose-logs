@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, SignatureSummary } from '../lib/api'
 import { pushToast } from '../hooks/useToasts'
-
 // Mini bar chart using SVG — no recharts needed for this simple case
 function TimelineChart({ data }: { data: { date: string; count: number }[] }) {
   if (!data.length) return (
@@ -64,10 +63,12 @@ export function DashboardPage() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [sortBy,  setSortBy]  = useState<'totalCount' | 'lastSeen' | 'firstSeen' | 'fileCount'>('totalCount')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [crashCount, setCrashCount] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { api.r5checks.summary().then(setSummary).catch(console.error) }, [])
   useEffect(() => { api.r5checks.timeline(days).then(setTimeline).catch(console.error) }, [days])
+  useEffect(() => { api.crashes.stats().then(s => setCrashCount(s.total)).catch(() => {}) }, [])
 
   const sorted = [...summary].sort((a, b) => {
     const av = a[sortBy] as number | string
@@ -160,9 +161,10 @@ export function DashboardPage() {
 
       <div style={{ padding: '24px 28px' }}>
         {/* Stats */}
-        <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
+        <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
           <StatCard label="Total R5Checks" value={total.toLocaleString()} color="var(--red)" />
           <StatCard label="Unique Signatures" value={summary.length} color="var(--amber)" />
+          <StatCard label="Crash Events" value={crashCount} color="var(--red)" sub="fatal errors & GPU crashes" />
           <StatCard label="Last Event" value={lastSeen} color="var(--text)" sub="most recent occurrence" />
         </div>
 
@@ -204,7 +206,7 @@ export function DashboardPage() {
               <th>Condition</th>
               <th>Source File</th>
               <th style={{ textAlign: 'center', cursor:'pointer' }} onClick={() => handleSort('fileCount')}>Files <SortIcon col="fileCount"/></th>
-              <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('totalCount')}>Count <SortIcon col="totalCount"/></th>
+              <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('totalCount')}>R5Check Count <SortIcon col="totalCount"/></th>
               <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('firstSeen')}>First <SortIcon col="firstSeen"/></th>
               <th style={{ textAlign: 'right', cursor:'pointer' }} onClick={() => handleSort('lastSeen')}>Last <SortIcon col="lastSeen"/></th>
             </tr></thead>
