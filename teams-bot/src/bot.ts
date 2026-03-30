@@ -241,8 +241,8 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       lines.push(`**${i + 1})**${unique} \`${(s.conditionText ?? '?').slice(0, 80)}\` ×${s.fileCount}`)
       // Каждая деталь — отдельный bullet чтобы Teams не схлопывал строки
       if (s.sampleMessage) lines.push(`- Message: ${s.sampleMessage.slice(0, 150)}`)
-      if (fn)              lines.push(`- Where: \`${fn}\``)
-      if (fln)             lines.push(`- File: \`${fln}\``)
+      if (fn)              lines.push(`- Where: ${fn}`)
+      if (fln)             lines.push(`- File: ${fln}`)
     })
     lines.push(``) // пустая строка после блока R5Check
   }
@@ -255,7 +255,7 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       lines.push(``)
       lines.push(`**${i + 1})** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
       if (e.userMessage) lines.push(`- Message: ${e.userMessage.slice(0, 150)}`)
-      if (fn)            lines.push(`- Function: \`${fn}\``)
+      if (fn)            lines.push(`- Function: ${fn}`)
     })
     if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
     lines.push(``) // пустая строка после блока Ensures
@@ -276,7 +276,6 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   }
 
   lines.push(`🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
-  // \n\n — единственный способ сделать реальный перенос строки в Teams markdown
   return lines.join('\n\n')
 }
 
