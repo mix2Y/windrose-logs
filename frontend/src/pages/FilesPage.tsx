@@ -40,15 +40,17 @@ export function FilesPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
   const [status,   setStatus]   = useState('')
+  const [search,   setSearch]   = useState('')
   const fileRef  = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
-  const fetchPage = useCallback(async (p: number, df: string, dt: string, st: string, reset: boolean) => {
+  const fetchPage = useCallback(async (p: number, df: string, dt: string, st: string, sr: string, reset: boolean) => {
     setLoading(true)
     try {
       const r = await api.files.list({
         page: p, pageSize: PAGE_SIZE,
-        dateFrom: df || undefined, dateTo: dt || undefined, status: st || undefined,
+        dateFrom: df || undefined, dateTo: dt || undefined,
+        status: st || undefined, search: sr || undefined,
       })
       setTotal(r.total)
       setFiles(prev => reset ? r.items : [...prev, ...r.items])
@@ -58,31 +60,31 @@ export function FilesPage() {
   }, [])
 
   // Initial load
-  useEffect(() => { fetchPage(1, '', '', '', true) }, [])
+  useEffect(() => { fetchPage(1, '', '', '', '', true) }, [])
 
   // Auto-refresh while pending/processing
   useEffect(() => {
     const hasPending = files.some(f => f.status === 'pending' || f.status === 'processing')
     if (!hasPending) return
-    const t = setTimeout(() => fetchPage(1, dateFrom, dateTo, status, true), 3000)
+    const t = setTimeout(() => fetchPage(1, dateFrom, dateTo, status, search, true), 3000)
     return () => clearTimeout(t)
   }, [files])
 
   function applyFilters() {
     setPage(1)
-    fetchPage(1, dateFrom, dateTo, status, true)
+    fetchPage(1, dateFrom, dateTo, status, search, true)
   }
   function clearFilters() {
-    setDateFrom(''); setDateTo(''); setStatus(''); setPage(1)
-    fetchPage(1, '', '', '', true)
+    setDateFrom(''); setDateTo(''); setStatus(''); setSearch(''); setPage(1)
+    fetchPage(1, '', '', '', '', true)
   }
 
   const loadMore = useCallback(() => {
     if (loading || !hasMore) return
     const next = page + 1
     setPage(next)
-    fetchPage(next, dateFrom, dateTo, status, false)
-  }, [loading, hasMore, page, dateFrom, dateTo, status])
+    fetchPage(next, dateFrom, dateTo, status, search, false)
+  }, [loading, hasMore, page, dateFrom, dateTo, status, search])
 
   const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loading)
 
@@ -137,7 +139,7 @@ export function FilesPage() {
     }, 3000)
   }
 
-  const hasFilters = dateFrom || dateTo || status
+  const hasFilters = dateFrom || dateTo || status || search
 
   return (
     <div>
@@ -161,6 +163,23 @@ export function FilesPage() {
 
       {/* Filter bar */}
       <div style={{ padding: '10px 28px', borderBottom: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {/* Search */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <svg style={{ position: 'absolute', left: 8, color: 'var(--text-3)', pointerEvents: 'none' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            className="input"
+            placeholder="Search files..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applyFilters()}
+            style={{ fontSize: 12, padding: '4px 8px 4px 26px', width: 200 }}
+          />
+          {search && (
+            <button onClick={() => { setSearch(''); fetchPage(1, dateFrom, dateTo, status, '', true) }}
+              style={{ position: 'absolute', right: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 0, lineHeight: 1 }}>×</button>
+          )}
+        </div>
+        <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
         {STATUS_OPTIONS.map(s => (
           <button key={s} onClick={() => { setStatus(s); setPage(1); fetchPage(1, dateFrom, dateTo, s, true) }}

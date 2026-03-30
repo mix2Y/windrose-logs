@@ -17,6 +17,7 @@ public class FilesController(AppDbContext db) : ControllerBase
         [FromQuery] DateOnly? dateFrom = null,
         [FromQuery] DateOnly? dateTo = null,
         [FromQuery] string? status = null,
+        [FromQuery] string? search = null,
         CancellationToken ct = default)
     {
         var query = db.LogFiles.AsQueryable();
@@ -26,6 +27,8 @@ public class FilesController(AppDbContext db) : ControllerBase
             query = query.Where(f => f.SessionDate == null || f.SessionDate <= dateTo);
         if (!string.IsNullOrEmpty(status))
             query = query.Where(f => f.Status == status);
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(f => f.FileName.ToLower().Contains(search.ToLower()));
 
         query = query.OrderByDescending(f => f.UploadedAt);
         var total = await query.CountAsync(ct);

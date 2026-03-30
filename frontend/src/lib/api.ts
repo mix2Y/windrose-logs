@@ -173,13 +173,14 @@ export const api = {
   },
 
   files: {
-    list: (params?: { page?: number; pageSize?: number; dateFrom?: string; dateTo?: string; status?: string }) => {
+    list: (params?: { page?: number; pageSize?: number; dateFrom?: string; dateTo?: string; status?: string; search?: string }) => {
       const p = new URLSearchParams()
       if (params?.page)     p.set('page',     String(params.page))
       if (params?.pageSize) p.set('pageSize', String(params.pageSize))
       if (params?.dateFrom) p.set('dateFrom', params.dateFrom)
       if (params?.dateTo)   p.set('dateTo',   params.dateTo)
       if (params?.status)   p.set('status',   params.status)
+      if (params?.search)   p.set('search',   params.search)
       return request<{ items: LogFileDto[]; total: number }>(`/files?${p.toString()}`)
     },
     details: (id: string) =>
