@@ -256,6 +256,10 @@ export const api = {
         file: LogFileDto
         eventCounts: { eventType: string; count: number }[]
         topSignatures: (SignatureSummary & { fileCount: number })[]
+        fatalErrors: { crashType: string | null; errorMessage: string | null; exitReason: string | null; crashGuid: string | null; timestamp: string }[]
+        errors:      { channel: string | null; errorMessage: string | null; function: string | null; sourceFile: string | null; timestamp: string }[]
+        ensures:     { condition: string | null; userMessage: string | null; function: string | null; file: string | null; timestamp: string }[]
+        memoryLeaks: { world: string | null; count: number; maxGrowth: number | null }[]
       }>(`/files/${id}`),
     raw: (id: string, page = 1, filter?: string) => {
       const p = new URLSearchParams({ page: String(page) })

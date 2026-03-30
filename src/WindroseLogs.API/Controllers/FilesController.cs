@@ -61,6 +61,7 @@ public class FilesController(AppDbContext db) : ControllerBase
             .Select(g => new { EventType = g.Key, Count = g.Count() })
             .ToListAsync(ct);
 
+        // R5Check signatures
         var topSignatures = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "R5Check")
             .GroupBy(e => e.SignatureId)
@@ -74,6 +75,55 @@ public class FilesController(AppDbContext db) : ControllerBase
                 })
             .ToListAsync(ct);
 
-        return Ok(new { file, eventCounts, topSignatures });
+        // FatalError events
+        var fatalErrors = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "FatalError")
+            .Select(e => new {
+                CrashType    = e.CheckCondition,
+                ErrorMessage = e.CheckMessage,
+                ExitReason   = e.CheckWhere,
+                CrashGuid    = e.CheckSourceFile,
+                e.Timestamp,
+            })
+            .ToListAsync(ct);
+
+        // Error events
+        var errors = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "Error")
+            .OrderByDescending(e => e.Timestamp)
+            .Select(e => new {
+                Channel      = e.CheckCondition,
+                ErrorMessage = e.CheckMessage,
+                Function     = e.CheckWhere,
+                SourceFile   = e.CheckSourceFile,
+                e.Timestamp,
+            })
+            .ToListAsync(ct);
+
+        // R5Ensure events
+        var ensures = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "R5Ensure")
+            .Select(e => new {
+                Condition   = e.CheckCondition,
+                UserMessage = e.CheckMessage,
+                Function    = e.CheckWhere,
+                File        = e.CheckSourceFile,
+                e.Timestamp,
+            })
+            .ToListAsync(ct);
+
+        // MemoryLeak summary by world
+        var memoryLeaks = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "MemoryLeak")
+            .GroupBy(e => e.MemoryWorld)
+            .Select(g => new {
+                World       = g.Key,
+                Count       = g.Count(),
+                MaxGrowth   = g.Max(e => e.MemoryGrowthRate),
+            })
+            .OrderByDescending(x => x.Count)
+            .ToListAsync(ct);
+
+        return Ok(new { file, eventCounts, topSignatures, fatalErrors, errors, ensures, memoryLeaks });
     }
 }

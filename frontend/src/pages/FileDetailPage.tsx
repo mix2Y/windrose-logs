@@ -21,19 +21,50 @@ function MetaField({ label, value, mono }: { label: string; value: string; mono?
   )
 }
 
+function SectionHeader({ title, count, color }: { title: string; count: number; color: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{title}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: 'Geist Mono,monospace',
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+        borderRadius: 4, padding: '1px 6px' }}>{count}</span>
+    </div>
+  )
+}
+
+const EVENT_COLORS: Record<string, string> = {
+  R5Check:    'var(--red)',
+  FatalError: 'var(--red)',
+  Error:      'var(--red)',
+  R5Ensure:   'var(--amber)',
+  MemoryLeak: '#38bdf8',
+}
+
 export function FileDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [file,    setFile]    = useState<LogFileDto | null>(null)
-  const [counts,  setCounts]  = useState<{ eventType: string; count: number }[]>([])
-  const [sigs,    setSigs]    = useState<(SignatureSummary & { fileCount: number })[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [file,       setFile]       = useState<LogFileDto | null>(null)
+  const [counts,     setCounts]     = useState<{ eventType: string; count: number }[]>([])
+  const [sigs,       setSigs]       = useState<(SignatureSummary & { fileCount: number })[]>([])
+  const [fatalErrors,setFatalErrors]= useState<any[]>([])
+  const [errors,     setErrors]     = useState<any[]>([])
+  const [ensures,    setEnsures]    = useState<any[]>([])
+  const [memLeaks,   setMemLeaks]   = useState<any[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     setLoading(true); setError(null)
     api.files.details(id)
-      .then(r => { setFile(r.file); setCounts(r.eventCounts ?? []); setSigs(r.topSignatures ?? []) })
+      .then(r => {
+        setFile(r.file); setCounts(r.eventCounts ?? [])
+        setSigs(r.topSignatures ?? [])
+        setFatalErrors(r.fatalErrors ?? [])
+        setErrors(r.errors ?? [])
+        setEnsures(r.ensures ?? [])
+        setMemLeaks(r.memoryLeaks ?? [])
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [id])
@@ -53,7 +84,6 @@ export function FileDetailPage() {
           Back to Log Files
         </Link>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:20 }}>
-          {/* Left: name + badges */}
           <div>
             <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
               <StatusBadge status={file.status} />
@@ -63,7 +93,6 @@ export function FileDetailPage() {
               {file.fileName}
             </h1>
           </div>
-          {/* Right: view log btn + count */}
           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:10, flexShrink:0 }}>
             <Link to={`/files/${id}/log`}
               style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:500, padding:'6px 12px', borderRadius:6, border:'1px solid var(--border)', color:'var(--text-2)', textDecoration:'none', background:'var(--bg)', whiteSpace:'nowrap' }}>
@@ -83,19 +112,20 @@ export function FileDetailPage() {
         <MetaField label="SESSION DATE" value={file.sessionDate ?? '—'} mono />
         <MetaField label="UPLOADED"     value={fmtDate(file.uploadedAt)} />
         <MetaField label="SOURCE"       value={file.source} />
+        {file.uploaderName && <MetaField label="UPLOADER" value={file.uploaderName} />}
         {file.errorMessage && <MetaField label="ERROR" value={file.errorMessage} />}
       </div>
 
-      <div style={{ padding:'20px 28px', display:'grid', gridTemplateColumns:'260px 1fr', gap:20 }}>
+      <div style={{ padding:'20px 28px', display:'grid', gridTemplateColumns:'220px 1fr', gap:20 }}>
         {/* Left: event breakdown */}
         <div>
           <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>Event Breakdown</div>
           <div className="card" style={{ overflow:'hidden' }}>
             {counts.length === 0
-              ? <div style={{ padding:'24px 16px', textAlign:'center', color:'var(--text-3)', fontSize:12 }}>No events found</div>
+              ? <div style={{ padding:'24px 16px', textAlign:'center', color:'var(--text-3)', fontSize:12 }}>No events</div>
               : counts.map(c => (
                 <div key={c.eventType} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)' }}>
-                  <span style={{ fontSize:12, color:'var(--text-2)', fontFamily:'Geist Mono,monospace' }}>{c.eventType}</span>
+                  <span style={{ fontSize:12, color: EVENT_COLORS[c.eventType] ?? 'var(--text-2)', fontFamily:'Geist Mono,monospace', fontWeight:500 }}>{c.eventType}</span>
                   <span className="badge badge-red">{c.count}</span>
                 </div>
               ))
@@ -103,39 +133,123 @@ export function FileDetailPage() {
           </div>
         </div>
 
-        {/* Right: top signatures */}
-        <div>
-          <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>R5Check Signatures in this File</div>
-          <div className="card" style={{ overflow:'hidden' }}>
-            <table className="data-table" style={{ tableLayout:'fixed', width:'100%' }}>
-              <colgroup>
-                <col style={{ width:'38%' }}/>
-                <col style={{ width:'38%' }}/>
-                <col style={{ width:'12%' }}/>
-                <col style={{ width:'12%' }}/>
-              </colgroup>
-              <thead><tr>
-                <th>Condition</th>
-                <th>Source File</th>
-                <th style={{ textAlign:'right' }}>In file</th>
-                <th style={{ textAlign:'right' }}>Total</th>
-              </tr></thead>
-              <tbody>
-                {sigs.length === 0 && <tr><td colSpan={4} style={{ textAlign:'center', padding:'24px 16px', color:'var(--text-3)' }}>No R5Check events</td></tr>}
-                {sigs.map((s, i) => (
-                  <tr key={s.id} className="animate-fade-in" style={{ animationDelay:`${i*15}ms`, cursor:'pointer' }}
-                    onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
-                    <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      <Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link>
-                    </td>
-                    <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.sourceFile ?? ''}>{s.sourceFile ?? '—'}</td>
-                    <td style={{ textAlign:'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>
-                    <td style={{ textAlign:'right' }}><span className="badge badge-gray">{s.totalCount}</span></td>
-                  </tr>
+        {/* Right: all event details */}
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+
+          {/* FatalError */}
+          {fatalErrors.length > 0 && (
+            <div>
+              <SectionHeader title="Fatal Errors / Crashes" count={fatalErrors.length} color="var(--red)" />
+              <div className="card" style={{ overflow:'hidden' }}>
+                {fatalErrors.map((f, i) => (
+                  <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', fontSize:12 }}>
+                    <div style={{ display:'flex', gap:8, marginBottom:4 }}>
+                      <span style={{ fontFamily:'Geist Mono,monospace', fontWeight:600, color:'var(--red)' }}>{f.crashType ?? 'Crash'}</span>
+                      {f.crashGuid && <span style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{f.crashGuid}</span>}
+                    </div>
+                    {f.errorMessage && <div style={{ color:'var(--text-2)', marginBottom:2 }}>{f.errorMessage}</div>}
+                    {f.exitReason   && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>Exit: {f.exitReason}</div>}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          )}
+
+          {/* Errors */}
+          {errors.length > 0 && (
+            <div>
+              <SectionHeader title="Errors" count={errors.length} color="var(--red)" />
+              <div className="card" style={{ overflow:'hidden' }}>
+                <table className="data-table" style={{ tableLayout:'fixed', width:'100%' }}>
+                  <colgroup><col style={{ width:'22%' }}/><col style={{ width:'50%' }}/><col style={{ width:'28%' }}/></colgroup>
+                  <thead><tr><th>Channel</th><th>Message</th><th>Function</th></tr></thead>
+                  <tbody>
+                    {errors.map((e, i) => (
+                      <tr key={i} className="animate-fade-in" style={{ animationDelay:`${i*10}ms` }}>
+                        <td><span style={{ fontFamily:'Geist Mono,monospace', fontSize:11, fontWeight:600, color:'var(--red)' }}>{e.channel ?? '?'}</span></td>
+                        <td style={{ fontSize:11, color:'var(--text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={e.errorMessage ?? ''}>{e.errorMessage ?? '—'}</td>
+                        <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={e.function ?? ''}>{e.function ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* R5Ensure */}
+          {ensures.length > 0 && (
+            <div>
+              <SectionHeader title="R5 Ensures" count={ensures.length} color="var(--amber)" />
+              <div className="card" style={{ overflow:'hidden' }}>
+                {ensures.map((e, i) => (
+                  <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', fontSize:12 }}>
+                    <div style={{ fontFamily:'Geist Mono,monospace', fontWeight:600, color:'var(--amber)', marginBottom:3 }}>Condition: {e.condition ?? 'false'}</div>
+                    {e.userMessage && <div style={{ color:'var(--text-2)', marginBottom:2 }}>{e.userMessage}</div>}
+                    {e.function    && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', marginBottom:2 }}>Function: {e.function}</div>}
+                    {e.file        && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>File: {e.file.split('\\').pop()}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* MemoryLeak */}
+          {memLeaks.length > 0 && (
+            <div>
+              <SectionHeader title="Memory Leaks" count={memLeaks.reduce((s,m) => s + m.count, 0)} color="#38bdf8" />
+              <div className="card" style={{ overflow:'hidden' }}>
+                <table className="data-table">
+                  <thead><tr><th>World</th><th style={{ textAlign:'right' }}>Events</th><th style={{ textAlign:'right' }}>Max Growth (MB/s)</th></tr></thead>
+                  <tbody>
+                    {memLeaks.map((m, i) => (
+                      <tr key={i}>
+                        <td style={{ fontFamily:'Geist Mono,monospace', fontSize:12 }}>{m.world || '—'}</td>
+                        <td style={{ textAlign:'right' }}><span className="badge badge-gray">{m.count}</span></td>
+                        <td style={{ textAlign:'right', fontFamily:'Geist Mono,monospace', fontSize:12, color:'#38bdf8' }}>{m.maxGrowth?.toFixed(1) ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* R5Check */}
+          {sigs.length > 0 && (
+            <div>
+              <SectionHeader title="R5Check Signatures" count={sigs.length} color="var(--red)" />
+              <div className="card" style={{ overflow:'hidden' }}>
+                <table className="data-table" style={{ tableLayout:'fixed', width:'100%' }}>
+                  <colgroup><col style={{ width:'35%' }}/><col style={{ width:'38%' }}/><col style={{ width:'13%' }}/><col style={{ width:'14%' }}/></colgroup>
+                  <thead><tr>
+                    <th>Condition</th><th>Source File</th>
+                    <th style={{ textAlign:'right' }}>In file</th>
+                    <th style={{ textAlign:'right' }}>Total</th>
+                  </tr></thead>
+                  <tbody>
+                    {sigs.map((s, i) => (
+                      <tr key={s.id} className="animate-fade-in" style={{ animationDelay:`${i*15}ms`, cursor:'pointer' }}
+                        onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
+                        <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          <Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link>
+                        </td>
+                        <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.sourceFile ?? ''}>{s.sourceFile ?? '—'}</td>
+                        <td style={{ textAlign:'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>
+                        <td style={{ textAlign:'right' }}><span className="badge badge-gray">{s.totalCount}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {totalEvents === 0 && (
+            <div className="card" style={{ padding:'48px 16px', textAlign:'center', color:'var(--text-3)', fontSize:13 }}>
+              No events found in this file
+            </div>
+          )}
         </div>
       </div>
     </div>
