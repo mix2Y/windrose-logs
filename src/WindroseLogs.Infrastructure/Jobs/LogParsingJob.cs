@@ -155,7 +155,7 @@ public class LogParsingJob(
 
         foreach (var g in events
             .Where(e => e.EventType == "Error")
-            .GroupBy(e => new { Cond = e.CheckCondition ?? "", Msg = e.CheckMessage ?? "" }))
+            .GroupBy(e => new { Cond = e.CheckCondition ?? "", Msg = TrimMsg(e.CheckMessage ?? "") }))
         {
             var hash = R5LogParser.ComputeSignatureHash(g.Key.Cond, g.Key.Msg);
             if (!dict.ContainsKey(hash))
@@ -211,5 +211,12 @@ public class LogParsingJob(
         var dir = Path.Combine("storage", "logs");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, $"{fileId}_{fileName}");
+    }
+
+    private static string TrimMsg(string msg)
+    {
+        var trimmed = msg.Length > 80 ? msg[..80] : msg;
+        return System.Text.RegularExpressions.Regex.Replace(trimmed,
+            @"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "").Trim();
     }
 }

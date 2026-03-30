@@ -50,6 +50,10 @@ public partial class R5LogParser
     [GeneratedRegex(@"^File '(.+)'")]
     private static partial Regex EnsureFileRegex();
 
+    // R5Log Error body: [frameNum] FunctionName    Message [source.cpp:line]
+    [GeneratedRegex(@"^\s*\[[\d:+-]+\]\s+(\w[\w:<>~]+(?:::\w[\w:<>~]*)*)\s{2,}(.+?)(?:\s+\[([^\[\]]+\.(?:cpp|h|inl):\d+)\])?$")]
+    private static partial Regex R5LogErrorBodyRegex();
+
     private enum ParseState { Normal, R5CheckBlock, Callstack, R5EnsureBlock, CrashStackTrace }
 
     public List<LogEvent> Parse(Stream stream, Guid fileId)
@@ -183,6 +187,50 @@ public partial class R5LogParser
                         crashStackFirstFrame = null;
                         crashStackTimestamp = blockTimestamp != default ? blockTimestamp : DateTimeOffset.UtcNow;
                         break;
+                    }
+
+                    // ── R5Log*: Error: lines (HTTP errors, asset errors, etc.) ─
+                    {
+                        var lm = LogLineRegex().Match(line);
+                        if (lm.Success && lm.Groups[4].Value == "Error")
+                        {
+                            var channel = lm.Groups[3].Value; // e.g. R5LogHttp
+                            var body    = lm.Groups[5].Value.Trim();
+                            // Skip: LogOutputDevice (R5Check callstacks), R5LogCheck (R5Check start marker)
+                            if (channel != "LogOutputDevice" && channel != "R5LogCheck" && body.Length > 10)
+                            {
+                                var ts    = ParseTimestamp(lm.Groups[1].Value);
+                                var frame = int.Parse(lm.Groups[2].Value.Trim());
+
+                                string? fnName = null, msgText = null, srcFile = null;
+                                var bm = R5LogErrorBodyRegex().Match(body);
+                                if (bm.Success)
+                                {
+                                    fnName  = bm.Groups[1].Value;
+                                    msgText = bm.Groups[2].Value.Trim();
+                                    srcFile = bm.Groups[3].Success ? bm.Groups[3].Value : null;
+                                }
+                                else
+                                {
+                                    msgText = body;
+                                }
+
+                                var sigHash = HexHash($"Error|{channel}|{fnName ?? ""}|{TrimMsg(msgText ?? "")}");
+                                results.Add(new LogEvent
+                                {
+                                    FileId      = fileId,
+                                    SignatureId = GuidFromHash(sigHash),
+                                    EventType   = "Error",
+                                    Timestamp   = ts,
+                                    FrameNumber = frame,
+                                    CheckCondition  = channel,
+                                    CheckMessage    = msgText,
+                                    CheckWhere      = fnName,
+                                    CheckSourceFile = srcFile,
+                                });
+                                break;
+                            }
+                        }
                     }
 
                     // Track last timestamp for R5Check block attribution
@@ -340,6 +388,14 @@ public partial class R5LogParser
         }
 
         return results;
+    }
+
+    private static string TrimMsg(string msg)
+    {
+        // Normalize dynamic parts: GUIDs, IDs, URLs → keep first 80 chars for grouping
+        var trimmed = msg.Length > 80 ? msg[..80] : msg;
+        // Strip trailing UUIDs/numbers for better dedup
+        return System.Text.RegularExpressions.Regex.Replace(trimmed, @"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "").Trim();
     }
 
     private static LogEvent BuildEnsureEvent(Guid fileId, DateTimeOffset ts,
