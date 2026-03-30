@@ -101,7 +101,7 @@ export function FilesPage() {
         text: `${count} file${count !== 1 ? 's' : ''} uploaded${skipped ? `, ${skipped} skipped (duplicate)` : ''}`,
         ok: true,
       })
-      fetchPage(1, dateFrom, dateTo, status, true)
+      fetchPage(1, dateFrom, dateTo, status, search, true)
       // Poll for completion then check for new signatures
       pollForAlerts(results.map((r: any) => r.fileId).filter(Boolean), uploadedAt)
     } catch { setMsg({ text: 'Upload failed', ok: false }) }
@@ -134,7 +134,7 @@ export function FilesPage() {
         } else {
           pushToast({ type: 'success', title: `Parsing complete`, body: `${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} processed, no new signatures` })
         }
-        fetchPage(1, dateFrom, dateTo, status, true)
+        fetchPage(1, dateFrom, dateTo, status, search, true)
       } catch { /* ignore */ }
     }, 3000)
   }
@@ -182,7 +182,7 @@ export function FilesPage() {
         <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
         {STATUS_OPTIONS.map(s => (
-          <button key={s} onClick={() => { setStatus(s); setPage(1); fetchPage(1, dateFrom, dateTo, s, true) }}
+          <button key={s} onClick={() => { setStatus(s); setPage(1); fetchPage(1, dateFrom, dateTo, s, search, true) }}
             style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, cursor: 'pointer', fontWeight: 500, border: status === s ? '1.5px solid var(--amber)' : '1.5px solid var(--border)', background: status === s ? 'var(--amber-bg)' : 'transparent', color: status === s ? 'var(--amber)' : 'var(--text-3)' }}>
             {s === '' ? 'All' : s}
           </button>
