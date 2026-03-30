@@ -156,7 +156,27 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
             })
             .ToListAsync(ct);
 
-        return Ok(new { file, eventCounts, topSignatures, crashEvents });
+        var errorEvents = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "Error")
+            .Select(e => new {
+                channel      = e.CheckCondition,
+                errorMessage = e.CheckMessage,
+                function     = e.CheckWhere,
+            })
+            .Take(5)
+            .ToListAsync(ct);
+
+        var ensureEvents = await db.LogEvents
+            .Where(e => e.FileId == id && e.EventType == "R5Ensure")
+            .Select(e => new {
+                condition   = e.CheckCondition,
+                userMessage = e.CheckMessage,
+                function    = e.CheckWhere,
+            })
+            .Take(3)
+            .ToListAsync(ct);
+
+        return Ok(new { file, eventCounts, topSignatures, crashEvents, errorEvents, ensureEvents });
     }
 
     /// <summary>Проверить новые уникальные сигнатуры после указанного времени</summary>
