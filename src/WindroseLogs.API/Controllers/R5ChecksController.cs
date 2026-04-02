@@ -2,13 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WindroseLogs.Infrastructure.Data;
+using WindroseLogs.Infrastructure.Services;
 
 namespace WindroseLogs.API.Controllers;
 
 [ApiController]
 [Route("api/r5checks")]
 [Authorize]
-public class R5ChecksController(AppDbContext db) : ControllerBase
+public class R5ChecksController(AppDbContext db, SentryService sentry, IConfiguration config) : ControllerBase
 {
     [HttpGet("summary")]
     public async Task<IActionResult> Summary(
@@ -150,5 +151,38 @@ public class R5ChecksController(AppDbContext db) : ControllerBase
             .OrderBy(x => x.Date)
             .ToListAsync(ct);
         return Ok(data);
+    }
+
+    /// <summary>
+    /// Обогатить все существующие R5Check сигнатуры без Sentry ссылок.
+    /// Вызывается один раз вручную после деплоя интеграции.
+    /// </summary>
+    [HttpPost("enrich-sentry")]
+    [AllowAnonymous]
+    public async Task<IActionResult> EnrichSentry(
+        [FromHeader(Name = "X-Api-Key")] string? apiKey,
+        CancellationToken ct)
+    {
+        if (apiKey != config["BulkImport:ApiKey"]) return Unauthorized();
+        if (!sentry.IsEnabled) return Ok(new { enriched = 0, message = "Sentry not configured" });
+
+        var sigs = await db.EventSignatures
+            .Where(s => s.EventType == "R5Check"
+                     && s.SentryIssueId == null
+                     && s.ConditionText != null)
+            .ToListAsync(ct);
+
+        int enriched = 0;
+        foreach (var sig in sigs)
+        {
+            var result = await sentry.FindByCondition(sig.ConditionText!, ct);
+            if (result is null) continue;
+            sig.SentryIssueId   = result.Value.issueId;
+            sig.SentryPermalink = result.Value.permalink;
+            enriched++;
+        }
+        if (enriched > 0) await db.SaveChangesAsync(ct);
+
+        return Ok(new { enriched, total = sigs.Count });
     }
 }
