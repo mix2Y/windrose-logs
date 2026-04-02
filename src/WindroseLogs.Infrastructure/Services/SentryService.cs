@@ -19,7 +19,8 @@ public class SentryService
         _baseUrl     = (config["Sentry:Url"]  ?? "https://sentry.windrose.support").TrimEnd('/');
         _enabled     = !string.IsNullOrEmpty(token);
 
-        // Support comma-separated list: "2,3" or legacy single "3"
+        // Support comma-separated list in priority order: first = highest priority
+        // e.g. "2,3" means dev(2) checked before prod(3)
         var raw      = config["Sentry:ProjectIds"] ?? config["Sentry:ProjectId"] ?? "3";
         _projectIds  = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -105,8 +106,18 @@ public class SentryService
 
             if (candidates.Count == 0) return null;
 
-            // Sort: prefer lower project ID (dev=2 before prod=3)
-            candidates.Sort((a, b) => a.projectId.CompareTo(b.projectId));
+            // Sort candidates by priority: order in _projectIds config (first = highest priority)
+            // Config "2,3" → dev(2) before prod(3)
+            var projectPriority = _projectIds
+                .Select((id, idx) => (id, idx))
+                .ToDictionary(x => x.id, x => x.idx);
+
+            candidates.Sort((a, b) =>
+            {
+                var pa = projectPriority.TryGetValue(a.projectId.ToString(), out var ia) ? ia : 999;
+                var pb = projectPriority.TryGetValue(b.projectId.ToString(), out var ib) ? ib : 999;
+                return pa.CompareTo(pb);
+            });
 
             foreach (var (issue, _, issueId) in candidates)
             {
