@@ -102,7 +102,9 @@ public class LogParsingJob(
                         _           => null
                     };
                     if (string.IsNullOrEmpty(searchText)) continue;
-                    var result = await sentry.FindByText(searchText, sig.FirstSeen, sig.LastSeen, ct);
+                    var result = sig.EventType == "FatalError"
+                        ? await sentry.FindByCrashType(searchText, sig.FirstSeen, sig.LastSeen, ct)
+                        : await sentry.FindByText(searchText, sig.FirstSeen, sig.LastSeen, ct);
                     if (result is null) continue;
                     sig.SentryIssueId   = result.Value.issueId;
                     sig.SentryPermalink = result.Value.permalink;

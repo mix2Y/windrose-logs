@@ -175,7 +175,9 @@ public class R5ChecksController(AppDbContext db, SentryService sentry, IConfigur
         int enriched = 0;
         foreach (var sig in sigs)
         {
-            var result = await sentry.FindByText(sig.ConditionText!, sig.FirstSeen, sig.LastSeen, ct);
+            var result = sig.EventType == "FatalError"
+                ? await sentry.FindByCrashType(sig.ConditionText!, sig.FirstSeen, sig.LastSeen, ct)
+                : await sentry.FindByText(sig.ConditionText!, sig.FirstSeen, sig.LastSeen, ct);
             if (result is null) continue;
             sig.SentryIssueId   = result.Value.issueId;
             sig.SentryPermalink = result.Value.permalink;

@@ -40,7 +40,9 @@ public class SentryService
         DateTimeOffset? sigFirstSeen = null,
         DateTimeOffset? sigLastSeen  = null,
         CancellationToken ct = default)
-        => await FindByText(crashType, sigFirstSeen, sigLastSeen, ct);
+        // FatalError events in Sentry have empty culprit and no Condition: in message
+        // so we only apply time overlap check
+        => await FindByText(crashType, sigFirstSeen, sigLastSeen, ct, requireFR5Culprit: false);
 
     /// <summary>
     /// Ищет Sentry issue по тексту.
@@ -53,7 +55,8 @@ public class SentryService
         string text,
         DateTimeOffset? sigFirstSeen = null,
         DateTimeOffset? sigLastSeen  = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool requireFR5Culprit = true)
     {
         if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
         try
@@ -73,22 +76,19 @@ public class SentryService
 
             foreach (var issue in root.EnumerateArray())
             {
-                // Filter 1: must be from game client
+                // Filter 1: must be from game client (skip for FatalError crash events)
                 var culprit = issue.TryGetProperty("culprit", out var c) ? c.GetString() ?? "" : "";
-                if (!culprit.Contains("FR5CheckDetails")) continue;
+                if (requireFR5Culprit && !culprit.Contains("FR5CheckDetails")) continue;
 
                 var issueId = issue.GetProperty("id").GetString() ?? "";
                 if (string.IsNullOrEmpty(issueId)) continue;
 
                 // Filter 2: time overlap (if signature times are provided)
-                if (sigFirstSeen.HasValue)
-                {
-                    if (!CheckTimeOverlap(issue, sigFirstSeen.Value, sigLastSeen))
-                        continue;
-                }
+                if (sigFirstSeen.HasValue && !CheckTimeOverlap(issue, sigFirstSeen.Value, sigLastSeen))
+                    continue;
 
-                // Filter 3: verify message actually contains Condition:{text}
-                if (!await VerifyConditionInEvent(issueId, text, ct)) continue;
+                // Filter 3: verify Condition in message (only for R5Check/R5Ensure)
+                if (requireFR5Culprit && !await VerifyConditionInEvent(issueId, text, ct)) continue;
 
                 var permalink = issue.TryGetProperty("permalink", out var p) && p.ValueKind == JsonValueKind.String
                     ? p.GetString()!
