@@ -29,22 +29,31 @@ public class SentryService
     public bool IsEnabled => _enabled;
 
     public async Task<(string issueId, string permalink)?> FindByCondition(
-        string condition, CancellationToken ct = default)
-        => await FindByText(condition, ct);
+        string condition,
+        DateTimeOffset? sigFirstSeen = null,
+        DateTimeOffset? sigLastSeen  = null,
+        CancellationToken ct = default)
+        => await FindByText(condition, sigFirstSeen, sigLastSeen, ct);
 
     public async Task<(string issueId, string permalink)?> FindByCrashType(
-        string crashType, CancellationToken ct = default)
-        => await FindByText(crashType, ct);
+        string crashType,
+        DateTimeOffset? sigFirstSeen = null,
+        DateTimeOffset? sigLastSeen  = null,
+        CancellationToken ct = default)
+        => await FindByText(crashType, sigFirstSeen, sigLastSeen, ct);
 
     /// <summary>
     /// Ищет Sentry issue по тексту.
-    /// Правила:
-    /// 1. Только culprit=FR5CheckDetails::LogToMonitoringTool — никакого fallback на sentry_unwind_stack.
-    /// 2. Верифицирует что message события содержит "Condition:{text}" — защита от коротких/общих слов.
-    /// 3. Если ничего не прошло верификацию — возвращаем null.
+    /// Фильтры (все должны пройти):
+    ///   1. culprit = FR5CheckDetails::LogToMonitoringTool
+    ///   2. message содержит "Condition:{text}" — защита от коротких/общих условий
+    ///   3. [опционально] временной overlap — Sentry issue был активен в период наших логов
     /// </summary>
     public async Task<(string issueId, string permalink)?> FindByText(
-        string text, CancellationToken ct = default)
+        string text,
+        DateTimeOffset? sigFirstSeen = null,
+        DateTimeOffset? sigLastSeen  = null,
+        CancellationToken ct = default)
     {
         if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
         try
@@ -64,12 +73,21 @@ public class SentryService
 
             foreach (var issue in root.EnumerateArray())
             {
+                // Filter 1: must be from game client
                 var culprit = issue.TryGetProperty("culprit", out var c) ? c.GetString() ?? "" : "";
                 if (!culprit.Contains("FR5CheckDetails")) continue;
 
                 var issueId = issue.GetProperty("id").GetString() ?? "";
                 if (string.IsNullOrEmpty(issueId)) continue;
 
+                // Filter 2: time overlap (if signature times are provided)
+                if (sigFirstSeen.HasValue)
+                {
+                    if (!CheckTimeOverlap(issue, sigFirstSeen.Value, sigLastSeen))
+                        continue;
+                }
+
+                // Filter 3: verify message actually contains Condition:{text}
                 if (!await VerifyConditionInEvent(issueId, text, ct)) continue;
 
                 var permalink = issue.TryGetProperty("permalink", out var p) && p.ValueKind == JsonValueKind.String
@@ -82,6 +100,38 @@ public class SentryService
             return null;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Проверяет временной overlap между Sentry issue и нашей сигнатурой.
+    /// Условие: Sentry issue должен быть активен в промежутке
+    ///   [sigFirstSeen - 90 дней .. sigLastSeen + 90 дней]
+    /// Широкий допуск нужен т.к. наши логи могут быть срезом более долгой проблемы.
+    /// </summary>
+    private static bool CheckTimeOverlap(
+        JsonElement issue,
+        DateTimeOffset sigFirstSeen,
+        DateTimeOffset? sigLastSeen)
+    {
+        const int toleranceDays = 90;
+
+        // Parse Sentry timestamps
+        DateTimeOffset sentryFirst = default;
+        DateTimeOffset sentryLast  = default;
+
+        if (issue.TryGetProperty("firstSeen", out var fs) && fs.ValueKind == JsonValueKind.String)
+            DateTimeOffset.TryParse(fs.GetString(), out sentryFirst);
+
+        if (issue.TryGetProperty("lastSeen", out var ls) && ls.ValueKind == JsonValueKind.String)
+            DateTimeOffset.TryParse(ls.GetString(), out sentryLast);
+
+        if (sentryFirst == default || sentryLast == default) return true; // no data → skip check
+
+        var ourStart = sigFirstSeen.AddDays(-toleranceDays);
+        var ourEnd   = (sigLastSeen ?? sigFirstSeen).AddDays(toleranceDays);
+
+        // Overlap: sentryLast >= ourStart AND sentryFirst <= ourEnd
+        return sentryLast >= ourStart && sentryFirst <= ourEnd;
     }
 
     /// <summary>
