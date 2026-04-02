@@ -16,35 +16,32 @@ public class SentryService
     {
         var token   = config["Sentry:Token"] ?? "";
         _orgSlug    = config["Sentry:Org"]   ?? "sentry";
-        _projectId  = config["Sentry:ProjectId"] ?? "3";   // numeric ID
+        _projectId  = config["Sentry:ProjectId"] ?? "3";
         _baseUrl    = (config["Sentry:Url"]  ?? "https://sentry.windrose.support").TrimEnd('/');
         _enabled    = !string.IsNullOrEmpty(token);
 
         _http = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
         _http.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
-        _http.Timeout = TimeSpan.FromSeconds(10);
+        _http.Timeout = TimeSpan.FromSeconds(15);
     }
 
     public bool IsEnabled => _enabled;
 
-    /// <summary>
-    /// Ищет Sentry issue по тексту Condition из R5Check / R5Ensure.
-    /// </summary>
     public async Task<(string issueId, string permalink)?> FindByCondition(
         string condition, CancellationToken ct = default)
         => await FindByText(condition, ct);
 
-    /// <summary>
-    /// Ищет Sentry issue по типу краша (например, "GPUCrash").
-    /// </summary>
     public async Task<(string issueId, string permalink)?> FindByCrashType(
         string crashType, CancellationToken ct = default)
         => await FindByText(crashType, ct);
 
-    /// <summary>Полнотекстовый поиск issue в Sentry.
-    /// Только принимает issues с culprit=FR5CheckDetails::LogToMonitoringTool
-    /// и верифицирует что Condition в message совпадает с искомым текстом.
+    /// <summary>
+    /// Ищет Sentry issue по тексту.
+    /// Правила:
+    /// 1. Только culprit=FR5CheckDetails::LogToMonitoringTool — никакого fallback на sentry_unwind_stack.
+    /// 2. Верифицирует что message события содержит "Condition:{text}" — защита от коротких/общих слов.
+    /// 3. Если ничего не прошло верификацию — возвращаем null.
     /// </summary>
     public async Task<(string issueId, string permalink)?> FindByText(
         string text, CancellationToken ct = default)
@@ -65,25 +62,21 @@ public class SentryService
             if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
                 return null;
 
-            // Only accept issues from game client (FR5CheckDetails::LogToMonitoringTool)
-            // Never fall back to sentry_unwind_stack* — those are false positives
             foreach (var issue in root.EnumerateArray())
             {
                 var culprit = issue.TryGetProperty("culprit", out var c) ? c.GetString() ?? "" : "";
                 if (!culprit.Contains("FR5CheckDetails")) continue;
 
-                var id = issue.GetProperty("id").GetString() ?? "";
-                if (string.IsNullOrEmpty(id)) continue;
+                var issueId = issue.GetProperty("id").GetString() ?? "";
+                if (string.IsNullOrEmpty(issueId)) continue;
 
-                // Verify the issue actually has Condition:{text} in its message
-                // This prevents false positives where the word appears elsewhere in the body
-                if (!await VerifyConditionInEvent(id, text, ct)) continue;
+                if (!await VerifyConditionInEvent(issueId, text, ct)) continue;
 
                 var permalink = issue.TryGetProperty("permalink", out var p) && p.ValueKind == JsonValueKind.String
                     ? p.GetString()!
-                    : $"{_baseUrl}/organizations/{_orgSlug}/issues/{id}/";
+                    : $"{_baseUrl}/organizations/{_orgSlug}/issues/{issueId}/";
 
-                return (id, permalink);
+                return (issueId, permalink);
             }
 
             return null;
@@ -92,9 +85,10 @@ public class SentryService
     }
 
     /// <summary>
-    /// Проверяет что первое событие issue содержит Condition:{conditionText} в message.
+    /// Проверяет что первое событие issue содержит "Condition:{conditionText}" в message.
     /// </summary>
-    private async Task<bool> VerifyConditionInEvent(string issueId, string conditionText, CancellationToken ct)
+    private async Task<bool> VerifyConditionInEvent(
+        string issueId, string conditionText, CancellationToken ct)
     {
         try
         {
@@ -108,7 +102,7 @@ public class SentryService
                 return false;
 
             var message = root[0].TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-            // Message format: "LogCategory:R5LogCheck\nCondition:{text}\n..."
+            // Message: "LogCategory:R5LogCheck\nCondition:{text}\nUserMessage:..."
             return message.Contains($"Condition:{conditionText}\n", StringComparison.OrdinalIgnoreCase)
                 || message.Contains($"Condition:{conditionText}\r", StringComparison.OrdinalIgnoreCase);
         }
