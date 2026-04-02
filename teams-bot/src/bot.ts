@@ -379,7 +379,8 @@ function fmtSig(s: any, i: number): string {
   const date = new Date(s.lastSeen || s.firstSeen).toLocaleDateString('ru-RU')
   const count = s.totalCount ? ` · ${s.totalCount}x` : ''
   const file  = s.sourceFile ? ` · ${s.sourceFile}` : ''
-  return `${i + 1}. \`${s.conditionText}\`${count}${file} · ${date}`
+  const sentry = s.sentryPermalink ? ` · [Sentry #${s.sentryIssueId}](${s.sentryPermalink})` : ''
+  return `${i + 1}. \`${s.conditionText}\`${count}${file} · ${date}${sentry}`
 }
 
 function fmtStats(s: any): string {

@@ -85,7 +85,7 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         var result = await db.EventSignatures
             .Where(s => s.EventType == "R5Check")
             .OrderByDescending(s => s.TotalCount)
-            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.TotalCount, s.FileCount, s.LastSeen })
+            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.TotalCount, s.FileCount, s.LastSeen, s.SentryIssueId, s.SentryPermalink })
             .ToListAsync(ct);
         return Ok(result);
     }
@@ -99,7 +99,7 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
             .Where(s => s.EventType == "R5Check" && s.TotalCount > 1)
             .OrderByDescending(s => s.TotalCount)
             .Take(top)
-            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.TotalCount, s.FileCount, s.LastSeen })
+            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.TotalCount, s.FileCount, s.LastSeen, s.SentryIssueId, s.SentryPermalink })
             .ToListAsync(ct);
         return Ok(result);
     }
@@ -112,7 +112,7 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
         var result = await db.EventSignatures
             .Where(s => s.EventType == "R5Check" && s.TotalCount == 1)
             .OrderByDescending(s => s.FirstSeen)
-            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.FirstSeen })
+            .Select(s => new { s.Id, s.ConditionText, s.SourceFile, s.FirstSeen, s.SentryIssueId, s.SentryPermalink })
             .ToListAsync(ct);
         return Ok(result);
     }
@@ -142,7 +142,8 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
                 (x, s) => new {
                     s.ConditionText, s.WhereText, s.SourceFile,
                     fileCount = x.Count, totalCount = s.TotalCount,
-                    sampleMessage = x.SampleMessage
+                    sampleMessage = x.SampleMessage,
+                    s.SentryIssueId, s.SentryPermalink
                 })
             .ToListAsync(ct);
 
