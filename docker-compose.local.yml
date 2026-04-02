@@ -30,6 +30,9 @@ services:
       - AzureAd__Audience=api://${AZURE_CLIENT_ID}
       - Frontend__Url=${FRONTEND_URL}
       - BulkImport__ApiKey=${BULK_IMPORT_API_KEY}
+      - Sentry__Token=${SENTRY_TOKEN}
+      - Sentry__Org=${SENTRY_ORG}
+      - Sentry__Url=${SENTRY_URL}
     volumes: ["/opt/windrose-logs/storage:/app/storage"]
     depends_on:
       postgres:
