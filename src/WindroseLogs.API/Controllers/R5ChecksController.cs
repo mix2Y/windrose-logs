@@ -167,15 +167,15 @@ public class R5ChecksController(AppDbContext db, SentryService sentry, IConfigur
         if (!sentry.IsEnabled) return Ok(new { enriched = 0, message = "Sentry not configured" });
 
         var sigs = await db.EventSignatures
-            .Where(s => s.EventType == "R5Check"
-                     && s.SentryIssueId == null
-                     && s.ConditionText != null)
+            .Where(s => s.SentryIssueId == null
+                     && s.ConditionText != null
+                     && (s.EventType == "R5Check" || s.EventType == "R5Ensure" || s.EventType == "FatalError"))
             .ToListAsync(ct);
 
         int enriched = 0;
         foreach (var sig in sigs)
         {
-            var result = await sentry.FindByCondition(sig.ConditionText!, ct);
+            var result = await sentry.FindByText(sig.ConditionText!, ct);
             if (result is null) continue;
             sig.SentryIssueId   = result.Value.issueId;
             sig.SentryPermalink = result.Value.permalink;

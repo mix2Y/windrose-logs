@@ -143,9 +143,18 @@ export function FileDetailPage() {
               <div className="card" style={{ overflow:'hidden' }}>
                 {fatalErrors.map((f, i) => (
                   <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', fontSize:12 }}>
-                    <div style={{ display:'flex', gap:8, marginBottom:4 }}>
+                    <div style={{ display:'flex', gap:8, marginBottom:4, alignItems:'center' }}>
                       <span style={{ fontFamily:'Geist Mono,monospace', fontWeight:600, color:'var(--red)' }}>{f.crashType ?? 'Crash'}</span>
                       {f.crashGuid && <span style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>{f.crashGuid}</span>}
+                      {f.sentryPermalink && (
+                        <a href={f.sentryPermalink} target="_blank" rel="noreferrer"
+                          style={{ fontSize:10, color:'#a78bfa', textDecoration:'none', fontFamily:'Geist Mono,monospace',
+                            background:'color-mix(in srgb, #7c3aed 10%, transparent)',
+                            border:'1px solid color-mix(in srgb, #7c3aed 30%, transparent)',
+                            borderRadius:3, padding:'1px 6px' }}>
+                          Sentry #{f.sentryIssueId}
+                        </a>
+                      )}
                     </div>
                     {f.errorMessage && <div style={{ color:'var(--text-2)', marginBottom:2 }}>{f.errorMessage}</div>}
                     {f.exitReason   && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>Exit: {f.exitReason}</div>}
@@ -184,7 +193,18 @@ export function FileDetailPage() {
               <div className="card" style={{ overflow:'hidden' }}>
                 {ensures.map((e, i) => (
                   <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', fontSize:12 }}>
-                    <div style={{ fontFamily:'Geist Mono,monospace', fontWeight:600, color:'var(--amber)', marginBottom:3 }}>Condition: {e.condition ?? 'false'}</div>
+                    <div style={{ display:'flex', gap:8, marginBottom:3, alignItems:'center', flexWrap:'wrap' }}>
+                      <span style={{ fontFamily:'Geist Mono,monospace', fontWeight:600, color:'var(--amber)' }}>Condition: {e.condition ?? 'false'}</span>
+                      {e.sentryPermalink && (
+                        <a href={e.sentryPermalink} target="_blank" rel="noreferrer"
+                          style={{ fontSize:10, color:'#a78bfa', textDecoration:'none', fontFamily:'Geist Mono,monospace',
+                            background:'color-mix(in srgb, #7c3aed 10%, transparent)',
+                            border:'1px solid color-mix(in srgb, #7c3aed 30%, transparent)',
+                            borderRadius:3, padding:'1px 6px' }}>
+                          Sentry #{e.sentryIssueId}
+                        </a>
+                      )}
+                    </div>
                     {e.userMessage && <div style={{ color:'var(--text-2)', marginBottom:2 }}>{e.userMessage}</div>}
                     {e.function    && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', marginBottom:2 }}>Function: {e.function}</div>}
                     {e.file        && <div style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)' }}>File: {e.file.split('\\').pop()}</div>}

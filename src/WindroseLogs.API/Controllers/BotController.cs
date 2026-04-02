@@ -149,12 +149,15 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
 
         var crashEvents = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "FatalError")
-            .Select(e => new {
-                crashType    = e.CheckCondition,
-                errorMessage = e.CheckMessage,
-                exitReason   = e.CheckWhere,
-                crashGuid    = e.CheckSourceFile,
-            })
+            .Join(db.EventSignatures, e => e.SignatureId, s => s.Id,
+                (e, s) => new {
+                    crashType    = e.CheckCondition,
+                    errorMessage = e.CheckMessage,
+                    exitReason   = e.CheckWhere,
+                    crashGuid    = e.CheckSourceFile,
+                    s.SentryIssueId,
+                    s.SentryPermalink,
+                })
             .ToListAsync(ct);
 
         var errorEvents = await db.LogEvents
@@ -169,11 +172,14 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
 
         var ensureEvents = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "R5Ensure")
-            .Select(e => new {
-                condition   = e.CheckCondition,
-                userMessage = e.CheckMessage,
-                function    = e.CheckWhere,
-            })
+            .Join(db.EventSignatures, e => e.SignatureId, s => s.Id,
+                (e, s) => new {
+                    condition   = e.CheckCondition,
+                    userMessage = e.CheckMessage,
+                    function    = e.CheckWhere,
+                    s.SentryIssueId,
+                    s.SentryPermalink,
+                })
             .Take(3)
             .ToListAsync(ct);
 

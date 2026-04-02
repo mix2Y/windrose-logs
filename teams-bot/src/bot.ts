@@ -225,8 +225,9 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
     lines.push(``, `**💥 Crash:**`)
     crashEvents.forEach((c: any) => {
       lines.push(`Type: \`${c.crashType ?? 'Unknown'}\`   Exit: \`${c.exitReason ?? '—'}\``)
-      if (c.errorMessage) lines.push(`Message: ${c.errorMessage}`)
-      if (c.crashGuid)    lines.push(`GUID: \`${c.crashGuid}\``)
+      if (c.errorMessage)    lines.push(`Message: ${c.errorMessage}`)
+      if (c.crashGuid)       lines.push(`GUID: \`${c.crashGuid}\``)
+      if (c.sentryPermalink) lines.push(`🔍 [Sentry #${c.sentryIssueId}](${c.sentryPermalink})`)
     })
   }
 
@@ -255,8 +256,9 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       const fn = trimWhere(e.function)
       lines.push(``)
       lines.push(`**${i + 1})** Condition: \`${(e.condition ?? 'false').slice(0, 80)}\``)
-      if (e.userMessage) lines.push(`- Message: ${e.userMessage.slice(0, 150)}`)
-      if (fn)            lines.push(`- Function: ${fn}`)
+      if (e.userMessage)    lines.push(`- Message: ${e.userMessage.slice(0, 150)}`)
+      if (fn)               lines.push(`- Function: ${fn}`)
+      if (e.sentryPermalink)lines.push(`- 🔍 [Sentry #${e.sentryIssueId}](${e.sentryPermalink})`)
     })
     if (ensures > ensureEvents.length) lines.push(`_...и ещё ${ensures - ensureEvents.length}_`)
     lines.push(``) // пустая строка после блока Ensures

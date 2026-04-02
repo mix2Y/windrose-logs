@@ -89,18 +89,25 @@ public class LogParsingJob(
             var affectedIds = existing.Values.Select(s => s.Id).ToList();
             await RecalculateSignatureStatsBatch(affectedIds, ct);
 
-            // ── 8. Enrich NEW R5Check signatures with Sentry links ────────────
-            if (sentry.IsEnabled && toCreate.Any(s => s.EventType == "R5Check"))
+            // ── 8. Enrich NEW signatures with Sentry links ────────────────────
+            if (sentry.IsEnabled && toCreate.Count > 0)
             {
-                var newR5 = toCreate.Where(s => s.EventType == "R5Check").ToList();
-                foreach (var sig in newR5)
+                foreach (var sig in toCreate)
                 {
-                    if (string.IsNullOrEmpty(sig.ConditionText)) continue;
-                    var result = await sentry.FindByCondition(sig.ConditionText, ct);
+                    string? searchText = sig.EventType switch
+                    {
+                        "R5Check"   => sig.ConditionText,
+                        "R5Ensure"  => sig.ConditionText,
+                        "FatalError"=> sig.ConditionText, // crash type e.g. "GPUCrash"
+                        _           => null
+                    };
+                    if (string.IsNullOrEmpty(searchText)) continue;
+                    var result = await sentry.FindByText(searchText, ct);
                     if (result is null) continue;
-                    sig.SentryIssueId    = result.Value.issueId;
-                    sig.SentryPermalink  = result.Value.permalink;
-                    logger.LogInformation("Sentry match: {Cond} → {Id}", sig.ConditionText, result.Value.issueId);
+                    sig.SentryIssueId   = result.Value.issueId;
+                    sig.SentryPermalink = result.Value.permalink;
+                    logger.LogInformation("Sentry match [{Type}] {Text} → #{Id}",
+                        sig.EventType, searchText, result.Value.issueId);
                 }
                 await db.SaveChangesAsync(ct);
             }

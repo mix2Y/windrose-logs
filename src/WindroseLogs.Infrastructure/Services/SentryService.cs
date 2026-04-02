@@ -29,18 +29,27 @@ public class SentryService
     public bool IsEnabled => _enabled;
 
     /// <summary>
-    /// Ищет Sentry issue по тексту Condition из R5Check.
-    /// Sentry message формат: "LogCategory:R5LogCheck\nCondition:{condition}\nUserMessage:...\nFile:..."
-    /// Ищем по тексту condition в message (fulltext).
+    /// Ищет Sentry issue по тексту Condition из R5Check / R5Ensure.
     /// </summary>
     public async Task<(string issueId, string permalink)?> FindByCondition(
         string condition, CancellationToken ct = default)
+        => await FindByText(condition, ct);
+
+    /// <summary>
+    /// Ищет Sentry issue по типу краша (например, "GPUCrash").
+    /// </summary>
+    public async Task<(string issueId, string permalink)?> FindByCrashType(
+        string crashType, CancellationToken ct = default)
+        => await FindByText(crashType, ct);
+
+    /// <summary>Полнотекстовый поиск issue в Sentry.</summary>
+    public async Task<(string issueId, string permalink)?> FindByText(
+        string text, CancellationToken ct = default)
     {
-        if (!_enabled) return null;
+        if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
         try
         {
-            // Fulltext search по condition — Sentry ищет в message/title
-            var query = Uri.EscapeDataString(condition);
+            var query = Uri.EscapeDataString(text);
             var url = $"api/0/organizations/{_orgSlug}/issues/" +
                       $"?project={_projectId}&query={query}&limit=1";
 

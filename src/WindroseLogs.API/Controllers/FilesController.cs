@@ -75,16 +75,19 @@ public class FilesController(AppDbContext db) : ControllerBase
                 })
             .ToListAsync(ct);
 
-        // FatalError events
+        // FatalError events — join with signatures for Sentry link
         var fatalErrors = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "FatalError")
-            .Select(e => new {
-                CrashType    = e.CheckCondition,
-                ErrorMessage = e.CheckMessage,
-                ExitReason   = e.CheckWhere,
-                CrashGuid    = e.CheckSourceFile,
-                e.Timestamp,
-            })
+            .Join(db.EventSignatures, e => e.SignatureId, s => s.Id,
+                (e, s) => new {
+                    CrashType    = e.CheckCondition,
+                    ErrorMessage = e.CheckMessage,
+                    ExitReason   = e.CheckWhere,
+                    CrashGuid    = e.CheckSourceFile,
+                    e.Timestamp,
+                    s.SentryIssueId,
+                    s.SentryPermalink,
+                })
             .ToListAsync(ct);
 
         // Error events
@@ -100,16 +103,19 @@ public class FilesController(AppDbContext db) : ControllerBase
             })
             .ToListAsync(ct);
 
-        // R5Ensure events
+        // R5Ensure events — join with signatures for Sentry link
         var ensures = await db.LogEvents
             .Where(e => e.FileId == id && e.EventType == "R5Ensure")
-            .Select(e => new {
-                Condition   = e.CheckCondition,
-                UserMessage = e.CheckMessage,
-                Function    = e.CheckWhere,
-                File        = e.CheckSourceFile,
-                e.Timestamp,
-            })
+            .Join(db.EventSignatures, e => e.SignatureId, s => s.Id,
+                (e, s) => new {
+                    Condition   = e.CheckCondition,
+                    UserMessage = e.CheckMessage,
+                    Function    = e.CheckWhere,
+                    File        = e.CheckSourceFile,
+                    e.Timestamp,
+                    s.SentryIssueId,
+                    s.SentryPermalink,
+                })
             .ToListAsync(ct);
 
         // MemoryLeak summary by world
