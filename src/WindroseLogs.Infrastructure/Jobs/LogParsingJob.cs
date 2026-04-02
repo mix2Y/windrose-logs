@@ -4,12 +4,14 @@ using WindroseLogs.Core.Interfaces;
 using WindroseLogs.Core.Models;
 using WindroseLogs.Infrastructure.Data;
 using WindroseLogs.Infrastructure.Parsing;
+using WindroseLogs.Infrastructure.Services;
 
 namespace WindroseLogs.Infrastructure.Jobs;
 
 public class LogParsingJob(
     AppDbContext db,
     R5LogParser parser,
+    SentryService sentry,
     ILogger<LogParsingJob> logger) : ILogParsingJob
 {
     public async Task ProcessFileAsync(Guid fileId, CancellationToken ct = default)
@@ -86,6 +88,22 @@ public class LogParsingJob(
             // ── 7. Recalculate stats for affected signatures (single query) ───
             var affectedIds = existing.Values.Select(s => s.Id).ToList();
             await RecalculateSignatureStatsBatch(affectedIds, ct);
+
+            // ── 8. Enrich NEW R5Check signatures with Sentry links ────────────
+            if (sentry.IsEnabled && toCreate.Any(s => s.EventType == "R5Check"))
+            {
+                var newR5 = toCreate.Where(s => s.EventType == "R5Check").ToList();
+                foreach (var sig in newR5)
+                {
+                    if (string.IsNullOrEmpty(sig.ConditionText)) continue;
+                    var result = await sentry.FindByCondition(sig.ConditionText, ct);
+                    if (result is null) continue;
+                    sig.SentryIssueId    = result.Value.issueId;
+                    sig.SentryPermalink  = result.Value.permalink;
+                    logger.LogInformation("Sentry match: {Cond} → {Id}", sig.ConditionText, result.Value.issueId);
+                }
+                await db.SaveChangesAsync(ct);
+            }
 
             logger.LogInformation("File {FileId} done — {Count} events, {Sigs} signatures",
                 fileId, events.Count, affectedIds.Count);

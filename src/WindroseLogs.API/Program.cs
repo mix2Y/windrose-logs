@@ -38,6 +38,7 @@ builder.Services.AddHangfireServer();
 builder.Services.AddScoped<R5LogParser>();
 builder.Services.AddScoped<LogParsingJob>();
 builder.Services.AddScoped<IngestService>();
+builder.Services.AddSingleton<WindroseLogs.Infrastructure.Services.SentryService>();
 
 // ── Web ────────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();

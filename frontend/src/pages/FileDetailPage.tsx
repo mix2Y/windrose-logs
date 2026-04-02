@@ -233,6 +233,15 @@ export function FileDetailPage() {
                         onClick={() => (window.location.href = `/r5checks/${s.id}`)}>
                         <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           <Link to={`/r5checks/${s.id}`} style={{ color:'var(--amber)', textDecoration:'none', fontFamily:'Geist Mono,monospace', fontSize:12, fontWeight:500 }} onClick={e => e.stopPropagation()}>{s.conditionText}</Link>
+                          {s.sentryPermalink && (
+                            <a href={s.sentryPermalink} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                              style={{ marginLeft:6, fontSize:10, color:'#a78bfa', textDecoration:'none', fontFamily:'Geist Mono,monospace',
+                                background:'color-mix(in srgb, #7c3aed 10%, transparent)',
+                                border:'1px solid color-mix(in srgb, #7c3aed 30%, transparent)',
+                                borderRadius:3, padding:'1px 5px' }}>
+                              Sentry
+                            </a>
+                          )}
                         </td>
                         <td style={{ fontFamily:'Geist Mono,monospace', fontSize:11, color:'var(--text-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={s.sourceFile ?? ''}>{s.sourceFile ?? '—'}</td>
                         <td style={{ textAlign:'right' }}><span className="badge badge-amber">{s.fileCount}</span></td>

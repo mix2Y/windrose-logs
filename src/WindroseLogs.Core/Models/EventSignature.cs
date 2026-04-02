@@ -27,5 +27,11 @@ public class EventSignature
     /// <summary>В скольких разных файлах встречалась</summary>
     public int FileCount { get; set; }
 
+    /// <summary>Sentry issue ID если найдено сопоставление</summary>
+    public string? SentryIssueId { get; set; }
+
+    /// <summary>Прямая ссылка на Sentry issue</summary>
+    public string? SentryPermalink { get; set; }
+
     public ICollection<LogEvent> Events { get; set; } = [];
 }

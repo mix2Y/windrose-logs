@@ -42,7 +42,8 @@ public class R5ChecksController(AppDbContext db) : ControllerBase
             .OrderByDescending(s => s.TotalCount)
             .Select(s => new {
                 s.Id, s.ConditionText, s.WhereText, s.SourceFile,
-                s.TotalCount, s.FileCount, s.FirstSeen, s.LastSeen
+                s.TotalCount, s.FileCount, s.FirstSeen, s.LastSeen,
+                s.SentryIssueId, s.SentryPermalink
             })
             .ToListAsync(ct);
         return Ok(summary);
@@ -76,7 +77,14 @@ public class R5ChecksController(AppDbContext db) : ControllerBase
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
         [FromQuery] Guid? fileId = null, CancellationToken ct = default)
     {
-        var sig = await db.EventSignatures.FindAsync([id], ct);
+        var sig = await db.EventSignatures
+            .Where(s => s.Id == id)
+            .Select(s => new {
+                s.Id, s.ConditionText, s.WhereText, s.SourceFile,
+                s.TotalCount, s.FileCount, s.FirstSeen, s.LastSeen,
+                s.SentryIssueId, s.SentryPermalink
+            })
+            .FirstOrDefaultAsync(ct);
         if (sig is null) return NotFound();
 
         var eventsQuery = db.LogEvents

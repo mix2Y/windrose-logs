@@ -86,9 +86,25 @@ export function R5CheckDetailPage() {
               '{signature.conditionText}'
             </h1>
           </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <div style={{ fontSize:36, fontWeight:700, color:'var(--red)', fontFamily:'Geist Mono,monospace', lineHeight:1, letterSpacing:'-0.03em' }}>{signature.totalCount}</div>
-            <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>occurrences</div>
+          <div style={{ textAlign:'right', flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:10 }}>
+            {signature.sentryPermalink && (
+              <a href={signature.sentryPermalink} target="_blank" rel="noreferrer"
+                style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:500,
+                  padding:'6px 12px', borderRadius:6, textDecoration:'none', whiteSpace:'nowrap',
+                  background:'color-mix(in srgb, #7c3aed 12%, transparent)',
+                  border:'1px solid color-mix(in srgb, #7c3aed 40%, transparent)',
+                  color:'#a78bfa' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                Sentry #{signature.sentryIssueId}
+              </a>
+            )}
+            <div>
+              <div style={{ fontSize:36, fontWeight:700, color:'var(--red)', fontFamily:'Geist Mono,monospace', lineHeight:1, letterSpacing:'-0.03em' }}>{signature.totalCount}</div>
+              <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>occurrences</div>
+            </div>
           </div>
         </div>
       </div>

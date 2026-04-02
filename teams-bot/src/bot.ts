@@ -243,6 +243,7 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
       if (s.sampleMessage) lines.push(`- Message: ${s.sampleMessage.slice(0, 150)}`)
       if (fn)              lines.push(`- Where: ${fn}`)
       if (fln)             lines.push(`- File: ${fln}`)
+      if (s.sentryPermalink) lines.push(`- 🔍 [Sentry #${s.sentryIssueId}](${s.sentryPermalink})`)
     })
     lines.push(``) // пустая строка после блока R5Check
   }

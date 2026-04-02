@@ -39,6 +39,8 @@ export interface SignatureSummary {
   fileCount: number
   firstSeen: string
   lastSeen: string
+  sentryIssueId?: string | null
+  sentryPermalink?: string | null
 }
 
 export interface EventDetail {
