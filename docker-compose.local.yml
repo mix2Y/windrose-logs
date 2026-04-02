@@ -33,6 +33,7 @@ services:
       - Sentry__Token=${SENTRY_TOKEN}
       - Sentry__Org=${SENTRY_ORG}
       - Sentry__Url=${SENTRY_URL}
+      - Sentry__ProjectId=${SENTRY_PROJECT_ID}
     volumes: ["/opt/windrose-logs/storage:/app/storage"]
     depends_on:
       postgres:

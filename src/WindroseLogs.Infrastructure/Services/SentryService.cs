@@ -8,7 +8,7 @@ public class SentryService
 {
     private readonly HttpClient _http;
     private readonly string _orgSlug;
-    private readonly string _projectSlug = "windrose-prod";
+    private readonly string _projectId;
     private readonly string _baseUrl;
     private readonly bool _enabled;
 
@@ -16,6 +16,7 @@ public class SentryService
     {
         var token   = config["Sentry:Token"] ?? "";
         _orgSlug    = config["Sentry:Org"]   ?? "sentry";
+        _projectId  = config["Sentry:ProjectId"] ?? "3";   // numeric ID
         _baseUrl    = (config["Sentry:Url"]  ?? "https://sentry.windrose.support").TrimEnd('/');
         _enabled    = !string.IsNullOrEmpty(token);
 
@@ -29,7 +30,8 @@ public class SentryService
 
     /// <summary>
     /// Ищет Sentry issue по тексту Condition из R5Check.
-    /// Message в Sentry имеет формат: "LogCategory:R5LogCheck\nCondition:...\nUserMessage:...\nFile:..."
+    /// Sentry message формат: "LogCategory:R5LogCheck\nCondition:{condition}\nUserMessage:...\nFile:..."
+    /// Ищем по тексту condition в message (fulltext).
     /// </summary>
     public async Task<(string issueId, string permalink)?> FindByCondition(
         string condition, CancellationToken ct = default)
@@ -37,9 +39,10 @@ public class SentryService
         if (!_enabled) return null;
         try
         {
-            var query = Uri.EscapeDataString($"Condition:{condition}");
+            // Fulltext search по condition — Sentry ищет в message/title
+            var query = Uri.EscapeDataString(condition);
             var url = $"api/0/organizations/{_orgSlug}/issues/" +
-                      $"?project={_projectSlug}&query={query}&limit=1";
+                      $"?project={_projectId}&query={query}&limit=1";
 
             var resp = await _http.GetAsync(url, ct);
             if (!resp.IsSuccessStatusCode) return null;
