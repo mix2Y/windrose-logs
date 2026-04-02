@@ -105,8 +105,8 @@ public class SentryService
 
             if (candidates.Count == 0) return null;
 
-            // Sort: prefer higher project ID (prod > dev), then higher issue count
-            candidates.Sort((a, b) => b.projectId.CompareTo(a.projectId));
+            // Sort: prefer lower project ID (dev=2 before prod=3)
+            candidates.Sort((a, b) => a.projectId.CompareTo(b.projectId));
 
             foreach (var (issue, _, issueId) in candidates)
             {
