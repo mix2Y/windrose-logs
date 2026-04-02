@@ -42,7 +42,10 @@ public class SentryService
         string crashType, CancellationToken ct = default)
         => await FindByText(crashType, ct);
 
-    /// <summary>Полнотекстовый поиск issue в Sentry.</summary>
+    /// <summary>Полнотекстовый поиск issue в Sentry.
+    /// Предпочитает issues с culprit=FR5CheckDetails::LogToMonitoringTool
+    /// чтобы избежать ложных срабатываний на Linux/server crash issues.
+    /// </summary>
     public async Task<(string issueId, string permalink)?> FindByText(
         string text, CancellationToken ct = default)
     {
@@ -50,8 +53,9 @@ public class SentryService
         try
         {
             var query = Uri.EscapeDataString(text);
+            // Берём больше результатов чтобы найти правильный culprit
             var url = $"api/0/organizations/{_orgSlug}/issues/" +
-                      $"?project={_projectId}&query={query}&limit=1";
+                      $"?project={_projectId}&query={query}&limit=20";
 
             var resp = await _http.GetAsync(url, ct);
             if (!resp.IsSuccessStatusCode) return null;
@@ -62,11 +66,29 @@ public class SentryService
             if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
                 return null;
 
-            var issue = root[0];
-            var id = issue.GetProperty("id").GetString() ?? "";
+            // Prefer issue from game client (FR5CheckDetails::LogToMonitoringTool)
+            // over server/Linux crash issues (sentry_unwind_stack etc.)
+            JsonElement? preferred = null;
+            JsonElement? fallback = null;
+
+            foreach (var issue in root.EnumerateArray())
+            {
+                var culprit = issue.TryGetProperty("culprit", out var c) ? c.GetString() ?? "" : "";
+                if (culprit.Contains("FR5CheckDetails"))
+                {
+                    preferred = issue;
+                    break;
+                }
+                fallback ??= issue;
+            }
+
+            var chosen = preferred ?? fallback;
+            if (chosen is null) return null;
+
+            var id = chosen.Value.GetProperty("id").GetString() ?? "";
             if (string.IsNullOrEmpty(id)) return null;
 
-            var permalink = issue.TryGetProperty("permalink", out var p) && p.ValueKind == JsonValueKind.String
+            var permalink = chosen.Value.TryGetProperty("permalink", out var p) && p.ValueKind == JsonValueKind.String
                 ? p.GetString()!
                 : $"{_baseUrl}/organizations/{_orgSlug}/issues/{id}/";
 
