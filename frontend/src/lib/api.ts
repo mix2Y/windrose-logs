@@ -262,6 +262,7 @@ export const api = {
         errors:      { channel: string | null; errorMessage: string | null; function: string | null; sourceFile: string | null; timestamp: string }[]
         ensures:     { condition: string | null; userMessage: string | null; function: string | null; file: string | null; timestamp: string }[]
         memoryLeaks: { world: string | null; count: number; maxGrowth: number | null }[]
+        sentryUrls: string[]
       }>(`/files/${id}`),
     raw: (id: string, page = 1, filter?: string) => {
       const p = new URLSearchParams({ page: String(page) })
