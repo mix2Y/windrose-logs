@@ -49,7 +49,7 @@ public class FilesController(AppDbContext db) : ControllerBase
             .Where(f => f.Id == id)
             .Select(f => new {
                 f.Id, f.FileName, f.Source, f.SessionDate,
-                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound, f.UploaderName
+                f.UploadedAt, f.Status, f.ErrorMessage, f.EventsFound, f.UploaderName, f.SentryUrls
             })
             .FirstOrDefaultAsync(ct);
 
@@ -130,6 +130,10 @@ public class FilesController(AppDbContext db) : ControllerBase
             .OrderByDescending(x => x.Count)
             .ToListAsync(ct);
 
-        return Ok(new { file, eventCounts, topSignatures, fatalErrors, errors, ensures, memoryLeaks });
+        var sentryUrls = string.IsNullOrEmpty(file.SentryUrls)
+            ? Array.Empty<string>()
+            : System.Text.Json.JsonSerializer.Deserialize<string[]>(file.SentryUrls) ?? Array.Empty<string>();
+
+        return Ok(new { file, eventCounts, topSignatures, fatalErrors, errors, ensures, memoryLeaks, sentryUrls });
     }
 }

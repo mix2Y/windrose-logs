@@ -56,9 +56,11 @@ public partial class R5LogParser
 
     private enum ParseState { Normal, R5CheckBlock, R5NoEntryBlock, Callstack, R5EnsureBlock, CrashStackTrace }
 
-    public List<LogEvent> Parse(Stream stream, Guid fileId)
+    public List<LogEvent> Parse(Stream stream, Guid fileId, out List<string> sentryUrls)
     {
         var results = new List<LogEvent>();
+        sentryUrls = new List<string>();
+        bool sentryUrlPending = false;
         var state = ParseState.Normal;
 
         DateTimeOffset blockTimestamp = default;
@@ -129,6 +131,28 @@ public partial class R5LogParser
             switch (state)
             {
                 case ParseState.Normal:
+                    // ── SentryUrl extraction ─────────────────────────────────
+                    if (sentryUrlPending)
+                    {
+                        var urlIdx = line.IndexOf("https://", StringComparison.Ordinal);
+                        if (urlIdx >= 0)
+                        {
+                            sentryUrls.Add(line[urlIdx..].TrimEnd());
+                            sentryUrlPending = false;
+                        }
+                        else if (!line.Contains("Verbose:"))
+                        {
+                            // Non-url, non-verbose line after marker — cancel
+                            sentryUrlPending = false;
+                        }
+                        break;
+                    }
+                    if (line.Contains("LogSentrySdk: ---- SentryUrl ----"))
+                    {
+                        sentryUrlPending = true;
+                        break;
+                    }
+
                     // ── R5Check trigger ──────────────────────────────────────
                     if (line.Contains("!!! R5Check happens !!!"))
                     {

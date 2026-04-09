@@ -122,7 +122,7 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
     {
         var file = await db.LogFiles
             .Where(f => f.Id == id)
-            .Select(f => new { f.Id, f.FileName, f.Status, f.EventsFound, f.UploaderName, f.UploadedAt })
+            .Select(f => new { f.Id, f.FileName, f.Status, f.EventsFound, f.UploaderName, f.UploadedAt, f.SentryUrls })
             .FirstOrDefaultAsync(ct);
         if (file is null) return NotFound();
 
@@ -183,7 +183,12 @@ public class BotController(AppDbContext db, IConfiguration config) : ControllerB
             .Take(3)
             .ToListAsync(ct);
 
-        return Ok(new { file, eventCounts, topSignatures, crashEvents, errorEvents, ensureEvents });
+        // Deserialize Sentry URLs from log
+        var sentryUrls = string.IsNullOrEmpty(file.SentryUrls)
+            ? Array.Empty<string>()
+            : System.Text.Json.JsonSerializer.Deserialize<string[]>(file.SentryUrls) ?? Array.Empty<string>();
+
+        return Ok(new { file, eventCounts, topSignatures, crashEvents, errorEvents, ensureEvents, sentryUrls });
     }
 
     /// <summary>Проверить новые уникальные сигнатуры после указанного времени</summary>

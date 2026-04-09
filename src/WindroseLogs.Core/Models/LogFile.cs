@@ -15,6 +15,9 @@ public class LogFile
     public int TotalLines { get; set; }
     public int EventsFound { get; set; }
 
+    /// <summary>Sentry event URLs extracted directly from log (LogSentrySdk: ---- SentryUrl ----)</summary>
+    public string? SentryUrls { get; set; }  // JSON array: ["https://..."]
+
     public User? Uploader { get; set; }
     public ICollection<LogEvent> Events { get; set; } = [];
 }

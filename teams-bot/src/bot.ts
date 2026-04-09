@@ -279,6 +279,16 @@ function formatFileStats(fileName: string, senderName: string, res: any): string
   }
 
   lines.push(`🔗 [Открыть в портале](${PORTAL_URL}/files/${file.id})`)
+
+  // Sentry URLs extracted from log
+  if (res.sentryUrls && res.sentryUrls.length > 0) {
+    lines.push(``)
+    lines.push(`**🐛 Sentry:**`)
+    res.sentryUrls.forEach((url: string, i: number) => {
+      lines.push(`[Событие ${i + 1}](${url})`)
+    })
+  }
+
   return lines.join('\n\n')
 }
 

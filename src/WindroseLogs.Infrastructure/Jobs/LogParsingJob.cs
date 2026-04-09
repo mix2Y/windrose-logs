@@ -11,7 +11,6 @@ namespace WindroseLogs.Infrastructure.Jobs;
 public class LogParsingJob(
     AppDbContext db,
     R5LogParser parser,
-    SentryService sentry,
     ILogger<LogParsingJob> logger) : ILogParsingJob
 {
     public async Task ProcessFileAsync(Guid fileId, CancellationToken ct = default)
@@ -26,7 +25,7 @@ public class LogParsingJob(
         {
             var path = GetStoragePath(fileId, file.FileName);
             await using var stream = File.OpenRead(path);
-            var events = parser.Parse(stream, fileId);
+            var events = parser.Parse(stream, fileId, out var sentryUrls);
             logger.LogInformation("Parsed {Count} events from {FileId}", events.Count, fileId);
 
             // ── 1. Remove old events for this file (idempotent) ───────────────
@@ -89,29 +88,12 @@ public class LogParsingJob(
             var affectedIds = existing.Values.Select(s => s.Id).ToList();
             await RecalculateSignatureStatsBatch(affectedIds, ct);
 
-            // ── 8. Enrich NEW signatures with Sentry links ────────────────────
-            if (sentry.IsEnabled && toCreate.Count > 0)
+            // ── 8. Save Sentry URLs extracted directly from log ──────────────
+            if (sentryUrls.Count > 0)
             {
-                foreach (var sig in toCreate)
-                {
-                    string? searchText = sig.EventType switch
-                    {
-                        "R5Check"   => sig.ConditionText,
-                        "R5Ensure"  => sig.ConditionText,
-                        "FatalError"=> sig.ConditionText, // crash type e.g. "GPUCrash"
-                        _           => null
-                    };
-                    if (string.IsNullOrEmpty(searchText)) continue;
-                    var result = sig.EventType == "FatalError"
-                        ? await sentry.FindByCrashType(searchText, sig.FirstSeen, sig.LastSeen, ct)
-                        : await sentry.FindByText(searchText, sig.FirstSeen, sig.LastSeen, ct);
-                    if (result is null) continue;
-                    sig.SentryIssueId   = result.Value.issueId;
-                    sig.SentryPermalink = result.Value.permalink;
-                    logger.LogInformation("Sentry match [{Type}] {Text} → #{Id}",
-                        sig.EventType, searchText, result.Value.issueId);
-                }
-                await db.SaveChangesAsync(ct);
+                file.SentryUrls = System.Text.Json.JsonSerializer.Serialize(sentryUrls);
+                logger.LogInformation("Sentry URLs from log [{FileId}]: {Urls}",
+                    fileId, string.Join(", ", sentryUrls));
             }
 
             logger.LogInformation("File {FileId} done — {Count} events, {Sigs} signatures",
