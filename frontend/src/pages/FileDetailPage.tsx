@@ -50,6 +50,7 @@ export function FileDetailPage() {
   const [errors,     setErrors]     = useState<any[]>([])
   const [ensures,    setEnsures]    = useState<any[]>([])
   const [memLeaks,   setMemLeaks]   = useState<any[]>([])
+  const [sentryUrls, setSentryUrls] = useState<string[]>([])
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState<string | null>(null)
 
@@ -64,6 +65,7 @@ export function FileDetailPage() {
         setErrors(r.errors ?? [])
         setEnsures(r.ensures ?? [])
         setMemLeaks(r.memoryLeaks ?? [])
+        setSentryUrls(r.sentryUrls ?? [])
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -270,6 +272,26 @@ export function FileDetailPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {sentryUrls.length > 0 && (
+            <div style={{ marginTop:16, padding:'14px 20px', background:'color-mix(in srgb, #7c3aed 8%, var(--bg))', borderRadius:8, border:'1px solid color-mix(in srgb, #7c3aed 25%, transparent)' }}>
+              <div style={{ fontSize:12, fontWeight:600, color:'#a78bfa', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Sentry — события из этого лога
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                {sentryUrls.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer"
+                    style={{ fontSize:12, color:'#a78bfa', textDecoration:'none',
+                      background:'color-mix(in srgb, #7c3aed 12%, transparent)',
+                      border:'1px solid color-mix(in srgb, #7c3aed 35%, transparent)',
+                      borderRadius:5, padding:'4px 10px', fontFamily:'Geist Mono,monospace' }}>
+                    Событие {i + 1} ↗
+                  </a>
+                ))}
               </div>
             </div>
           )}
