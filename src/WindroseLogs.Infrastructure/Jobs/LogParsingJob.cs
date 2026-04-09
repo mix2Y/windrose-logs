@@ -92,8 +92,9 @@ public class LogParsingJob(
             if (sentryUrls.Count > 0)
             {
                 file.SentryUrls = System.Text.Json.JsonSerializer.Serialize(sentryUrls);
-                logger.LogInformation("Sentry URLs from log [{FileId}]: {Urls}",
-                    fileId, string.Join(", ", sentryUrls));
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation("Sentry URLs from log [{FileId}]: {Count} URLs",
+                    fileId, sentryUrls.Count);
             }
 
             logger.LogInformation("File {FileId} done — {Count} events, {Sigs} signatures",
